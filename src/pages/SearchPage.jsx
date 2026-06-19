@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { CameraSearch } from '../components/CameraSearch'
 
 export function SearchPage() {
   const [medicines, setMedicines] = useState([])
@@ -23,6 +24,7 @@ export function SearchPage() {
       </nav>
 
       <div className="max-w-2xl mx-auto px-4 py-8">
+        {/* Search bar + camera button */}
         <div className="flex gap-2 mb-6">
           <input
             type="text"
@@ -31,6 +33,7 @@ export function SearchPage() {
             onChange={e => setQuery(e.target.value)}
             className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <CameraSearch onResult={name => setQuery(name)} />
         </div>
 
         {filtered.length === 0 && query && (
