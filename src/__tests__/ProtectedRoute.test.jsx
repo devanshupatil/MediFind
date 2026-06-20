@@ -11,7 +11,7 @@ import { useAuth } from '../hooks/useAuth'
 
 describe('ProtectedRoute', () => {
   it('renders children when session exists', () => {
-    useAuth.mockReturnValue({ session: { user: { id: '1' } } })
+    useAuth.mockReturnValue({ session: { user: { id: '1' } }, loading: false })
     render(
       <MemoryRouter initialEntries={['/admin/dashboard']}>
         <Routes>
@@ -24,7 +24,7 @@ describe('ProtectedRoute', () => {
   })
 
   it('redirects to /admin/login when no session', () => {
-    useAuth.mockReturnValue({ session: null })
+    useAuth.mockReturnValue({ session: null, loading: false })
     render(
       <MemoryRouter initialEntries={['/admin/dashboard']}>
         <Routes>

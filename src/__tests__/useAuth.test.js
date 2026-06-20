@@ -30,4 +30,9 @@ describe('useAuth', () => {
     expect(typeof result.current.login).toBe('function')
     expect(typeof result.current.logout).toBe('function')
   })
+
+  it('exposes loading state', async () => {
+    const { result } = renderHook(() => useAuth())
+    expect(typeof result.current.loading).toBe('boolean')
+  })
 })

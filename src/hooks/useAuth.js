@@ -3,12 +3,21 @@ import { supabase } from '../lib/supabase'
 
 export function useAuth() {
   const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)   // true until getSession resolves
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    // Check existing session on mount
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setLoading(false)
+    })
+
+    // Listen for sign-in / sign-out events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      setLoading(false)
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -17,5 +26,5 @@ export function useAuth() {
 
   const logout = () => supabase.auth.signOut()
 
-  return { session, login, logout }
+  return { session, loading, login, logout }
 }
