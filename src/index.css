@@ -1,3 +1,125 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  /* Ambient mesh base */
+  .bg-mesh {
+    background:
+      radial-gradient(ellipse 70% 50% at 10% 5%,  rgba(59,130,246,0.10) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 50% at 90% 90%,  rgba(139,92,246,0.09) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 60% at 55% 45%,  rgba(219,234,254,0.35) 0%, transparent 65%),
+      #f8fafc;
+  }
+
+  /* Dot grid overlay */
+  .bg-dots {
+    background-image: radial-gradient(circle, rgba(59,130,246,0.13) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Glassmorphism card */
+  .glass {
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  /* Entrance animations */
+  .animate-fade-up {
+    opacity: 0;
+    animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Background orb animations */
+  .animate-orb-1 { animation: orb-drift-1 18s ease-in-out infinite; }
+  .animate-orb-2 { animation: orb-drift-2 22s ease-in-out infinite 2s; }
+  .animate-orb-3 { animation: orb-drift-3 16s ease-in-out infinite 5s; }
+  .animate-orb-4 { animation: orb-drift-4 13s ease-in-out infinite 1s; }
+  .animate-orb-5 { animation: orb-drift-5 20s ease-in-out infinite 7s; }
+
+  /* Header gradient breathing */
+  .animate-gradient-breathe { animation: gradient-breathe 8s ease-in-out infinite; }
+
+  /* Legacy float (kept for compat) */
+  .animate-float         { animation: orb-drift-1  9s ease-in-out infinite; }
+  .animate-float-delayed { animation: orb-drift-2 11s ease-in-out infinite 3s; }
+}
+
+/* ── Entrance ───────────────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Background orb drift paths (5 unique paths) ──────────────────────────── */
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(  0px,   0px) scale(1.00); }
+  25%       { transform: translate( 50px, -60px) scale(1.08); }
+  50%       { transform: translate( 90px,  25px) scale(0.94); }
+  75%       { transform: translate( 30px,  70px) scale(1.05); }
+}
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(  0px,   0px) scale(1.00); }
+  30%       { transform: translate(-70px,  50px) scale(1.10); }
+  60%       { transform: translate(-25px, -70px) scale(0.92); }
+  80%       { transform: translate(-55px,  20px) scale(1.06); }
+}
+@keyframes orb-drift-3 {
+  0%, 100% { transform: translate(  0px,   0px) scale(1.00); }
+  35%       { transform: translate( 40px,  75px) scale(1.06); }
+  70%       { transform: translate(-50px,  35px) scale(0.96); }
+}
+@keyframes orb-drift-4 {
+  0%, 100% { transform: translate(  0px,   0px) scale(1.00); }
+  20%       { transform: translate(-60px, -40px) scale(1.12); }
+  50%       { transform: translate( 30px, -65px) scale(0.90); }
+  80%       { transform: translate( 60px,  15px) scale(1.07); }
+}
+@keyframes orb-drift-5 {
+  0%, 100% { transform: translate(  0px,   0px) scale(1.00); }
+  40%       { transform: translate( 75px,  50px) scale(0.93); }
+  75%       { transform: translate(-35px,  65px) scale(1.08); }
+}
+
+/* ── Header gradient breathing ─────────────────────────────────────────────── */
+@keyframes gradient-breathe {
+  0%, 100% { opacity: 0.25; transform: translateX(-15%) translateY(-10%) scale(1.1); }
+  50%       { opacity: 0.55; transform: translateX( 15%) translateY( 10%) scale(1.0); }
+}
+
+/* ── CameraSearch internal ─────────────────────────────────────────────────── */
+@keyframes scan-line {
+  0%   { top: 12%; }
+  50%  { top: 82%; }
+  100% { top: 12%; }
+}
+.animate-scan-line { animation: scan-line 2s ease-in-out infinite; position: absolute; }
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-shimmer { animation: shimmer 1.2s ease-in-out infinite; }
+
+/* ── Reduced motion ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-orb-1, .animate-orb-2, .animate-orb-3,
+  .animate-orb-4, .animate-orb-5,
+  .animate-float, .animate-float-delayed,
+  .animate-gradient-breathe,
+  .animate-scan-line, .animate-shimmer { animation: none; }
+  .animate-fade-up { opacity: 1; }
+}
