@@ -1,43 +1,42 @@
 import { useState, useRef, useCallback } from 'react'
 import Groq from 'groq-sdk'
+import { supabase } from '../lib/supabase'
 
 // ─── Groq Vision client ───────────────────────────────────────────────────────
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
 const isKeyReady = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here'
 
-// Use llama-4-scout — Groq's fastest free multimodal model
 const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
 
-const PROMPT = `You are a pharmacist's assistant. Look at this medicine packaging image.
-
-Extract the medicine information and return ONLY a JSON object in this exact format:
+// Prompt: extract text and separately flag name candidates
+const OCR_PROMPT = `You are a medicine label OCR expert. Analyse this medicine packaging image.
+Return ONLY a JSON object in this exact format (no markdown, no explanation):
 {
-  "name": "Medicine name and dosage strength e.g. Paracetamol 500mg",
-  "confidence": "high | medium | low",
-  "details": "Brand name, manufacturer, tablet/syrup/gel, other info if visible"
+  "name_candidates": ["list of likely brand/generic names and dosage strings — short phrases only, e.g. Crocin Advance, Paracetamol 500mg, Ibuprofen 400mg"],
+  "all_text": ["every other text fragment visible — manufacturer, instructions, batch, etc."]
 }
-
 Rules:
-- "name" = primary generic name + dosage only (e.g. "Ibuprofen 400mg")
-- If no medicine found, set name to empty string ""
-- Return raw JSON only — no markdown, no explanation`
+- name_candidates: ONLY short (≤5 words) brand/generic/dosage fragments. These are the most prominent, largest text on the pack.
+- all_text: everything else readable on the label.
+- Return raw JSON only.`
 
-async function analyzeWithGroq(base64Data, mimeType = 'image/jpeg') {
+/** Returns { nameCandidates: string[], allText: string[] } */
+async function extractTextFromImage(base64Data, mimeType = 'image/jpeg') {
   if (!isKeyReady) throw new Error('NO_API_KEY')
 
   const client = new Groq({
     apiKey: GROQ_API_KEY,
-    dangerouslyAllowBrowser: true,   // required for browser usage
+    dangerouslyAllowBrowser: true,
   })
 
   const response = await client.chat.completions.create({
     model: VISION_MODEL,
-    max_tokens: 256,
+    max_tokens: 600,
     messages: [
       {
         role: 'user',
         content: [
-          { type: 'text', text: PROMPT },
+          { type: 'text', text: OCR_PROMPT },
           {
             type: 'image_url',
             image_url: { url: `data:${mimeType};base64,${base64Data}` },
@@ -48,25 +47,154 @@ async function analyzeWithGroq(base64Data, mimeType = 'image/jpeg') {
   })
 
   const raw = response.choices[0]?.message?.content?.trim() ?? ''
-  // Strip accidental markdown fences
-  const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
+  // Strip markdown fences
+  const stripped = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
+  // Try to pull a JSON object out even if there's surrounding text
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/)
+  const clean = jsonMatch ? jsonMatch[0] : stripped
+
+  /** Filter out tokens that are clearly JSON structure artifacts */
+  const isValidToken = (s) => {
+    const t = s.trim()
+    if (!t || t.length < 2 || t.length > 80) return false
+    if (/^[{\[\]}",\\]/.test(t)) return false
+    if (/^(name_candidates|all_text|:\s*\[)/.test(t)) return false
+    return true
+  }
 
   try {
-    return JSON.parse(clean)
+    const parsed = JSON.parse(clean)
+    return {
+      nameCandidates: (Array.isArray(parsed.name_candidates) ? parsed.name_candidates : []).filter(isValidToken),
+      allText: (Array.isArray(parsed.all_text) ? parsed.all_text : []).filter(isValidToken),
+    }
   } catch {
-    return { name: clean, confidence: 'low', details: '' }
+    // Fallback: extract quoted strings from the raw output
+    const quoted = [...stripped.matchAll(/"([^"]{2,60})"/g)].map(m => m[1]).filter(isValidToken)
+    return { nameCandidates: quoted.slice(0, 8), allText: [] }
   }
 }
 
+// ─── Fuzzy matching helpers ───────────────────────────────────────────────────
+
+/** Simple Levenshtein distance */
+function levenshtein(a, b) {
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  )
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+  return dp[m][n]
+}
+
+/**
+ * Score how well a medicine DB name matches extracted OCR data.
+ * nameCandidates (brand/generic strings) get highest weight.
+ * allText tokens are used only for secondary word-level matching.
+ * Returns score 0–100.
+ */
+function scoreMatch(medicineName, nameCandidates, allText) {
+  const mLower = medicineName.toLowerCase().trim()
+  const mWords = mLower.split(/\s+/).filter(w => w.length >= 3)
+  let best = 0
+
+  // ── Priority 1: match against name candidates (short, high-confidence tokens) ──
+  for (const token of nameCandidates) {
+    const tLower = token.toLowerCase().trim()
+    if (!tLower || tLower.length > 60) continue  // skip garbage
+
+    // Exact full match
+    if (mLower === tLower) { best = 100; break }
+
+    // Medicine name fully contained in token or vice versa
+    if (mLower.includes(tLower) || tLower.includes(mLower)) {
+      best = Math.max(best, 95)
+      continue
+    }
+
+    // Word-level: every word of medicine name found in this token
+    const tWords = tLower.split(/\s+/).filter(w => w.length >= 3)
+    const matchedWords = mWords.filter(w => tLower.includes(w) || tWords.some(tw => tw.includes(w)))
+    if (mWords.length > 0 && matchedWords.length === mWords.length) {
+      best = Math.max(best, 90)
+      continue
+    }
+    if (mWords.length > 0 && matchedWords.length >= Math.ceil(mWords.length * 0.6)) {
+      best = Math.max(best, 75)
+      continue
+    }
+
+    // Levenshtein on the token itself vs medicine name
+    if (tLower.length <= 40) {
+      const dist = levenshtein(mLower, tLower)
+      const similarity = 1 - dist / Math.max(mLower.length, tLower.length)
+      if (similarity >= 0.8) best = Math.max(best, Math.round(similarity * 88))
+      else if (similarity >= 0.65) best = Math.max(best, Math.round(similarity * 70))
+    }
+
+    // Per-word fuzzy against token words
+    for (const word of mWords) {
+      for (const tw of tWords) {
+        const dist = levenshtein(word, tw)
+        const sim = 1 - dist / Math.max(word.length, tw.length)
+        if (sim >= 0.82) best = Math.max(best, Math.round(sim * 72))
+      }
+    }
+  }
+
+  // ── Priority 2: secondary check against all_text (lower ceiling) ──
+  if (best < 50) {
+    for (const token of allText) {
+      const tLower = token.toLowerCase().trim()
+      // Only use short all_text tokens (≤ 40 chars) to avoid false positives from instructions
+      if (!tLower || tLower.length > 40) continue
+
+      if (mLower.includes(tLower) || tLower.includes(mLower)) {
+        best = Math.max(best, 70)  // capped lower than nameCandidates
+        continue
+      }
+      for (const word of mWords) {
+        if (tLower.includes(word)) best = Math.max(best, 55)
+      }
+    }
+  }
+
+  return best
+}
+
+/**
+ * Fetch all medicines from Supabase and rank them against extracted OCR data.
+ */
+async function findMatchingMedicines({ nameCandidates, allText }, limit = 5) {
+  const { data, error } = await supabase.from('medicines').select('*')
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) return []
+
+  const scored = data.map(med => ({
+    ...med,
+    score: scoreMatch(med.name, nameCandidates, allText),
+  }))
+
+  return scored
+    .filter(m => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
 // ─── State machine ────────────────────────────────────────────────────────────
-const S = { IDLE: 'idle', PREVIEW: 'preview', ANALYZING: 'analyzing', DONE: 'done', ERROR: 'error' }
+const S = { IDLE: 'idle', PREVIEW: 'preview', ANALYZING: 'analyzing', MATCHING: 'matching', DONE: 'done', ERROR: 'error' }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function CameraSearch({ onResult }) {
+export function CameraSearch({ onResult, iconOnly = false }) {
   const [state, setState] = useState(S.IDLE)
   const [isOpen, setIsOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState(null)
-  const [result, setResult] = useState(null)
+  const [ocrData, setOcrData] = useState({ nameCandidates: [], allText: [] }) // structured OCR
+  const [matches, setMatches] = useState([])          // top DB matches
   const [error, setError] = useState('')
 
   const videoRef = useRef(null)
@@ -84,7 +212,8 @@ export function CameraSearch({ onResult }) {
     setIsOpen(true)
     setState(S.PREVIEW)
     setImageSrc(null)
-    setResult(null)
+    setOcrData({ nameCandidates: [], allText: [] })
+    setMatches([])
     setError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -103,7 +232,8 @@ export function CameraSearch({ onResult }) {
     setIsOpen(false)
     setState(S.IDLE)
     setImageSrc(null)
-    setResult(null)
+    setOcrData({ nameCandidates: [], allText: [] })
+    setMatches([])
     setError('')
   }, [stopCamera])
 
@@ -132,11 +262,12 @@ export function CameraSearch({ onResult }) {
     e.target.value = ''
   }, [])
 
-  // ── send image to Groq Vision ───────────────────────────────────────────────
+  // ── Main pipeline: OCR → DB match ──────────────────────────────────────────
   const processImage = useCallback(async (dataUrl) => {
     setImageSrc(dataUrl)
     setState(S.ANALYZING)
-    setResult(null)
+    setOcrData({ nameCandidates: [], allText: [] })
+    setMatches([])
     setError('')
 
     if (!isKeyReady) {
@@ -146,12 +277,22 @@ export function CameraSearch({ onResult }) {
     }
 
     try {
+      // Step 1: extract text — AI returns { nameCandidates, allText }
       const [meta, base64] = dataUrl.split(',')
       const mimeType = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg'
-      const parsed = await analyzeWithGroq(base64, mimeType)
-      setResult(parsed)
+      const extracted = await extractTextFromImage(base64, mimeType)
+      setOcrData(extracted)
+
+      // Step 2: fuzzy-match name candidates + allText against the DB
+      setState(S.MATCHING)
+      const topMatches = await findMatchingMedicines(extracted)
+      setMatches(topMatches)
       setState(S.DONE)
-      if (parsed.name) onResult(parsed.name)
+
+      // Auto-select if there is exactly one strong match
+      if (topMatches.length === 1 && topMatches[0].score >= 80) {
+        onResult(topMatches[0].name)
+      }
     } catch (err) {
       setError(err.message.includes('NO_API_KEY')
         ? 'Groq API key not configured.'
@@ -160,16 +301,10 @@ export function CameraSearch({ onResult }) {
     }
   }, [onResult])
 
-  const useThisResult = useCallback(() => {
-    if (result?.name) onResult(result.name)
+  const selectMatch = useCallback((name) => {
+    onResult(name)
     close()
-  }, [result, onResult, close])
-
-  const confidenceBadge = {
-    high:   'bg-green-100 text-green-700 border-green-200',
-    medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    low:    'bg-orange-100 text-orange-700 border-orange-200',
-  }
+  }, [onResult, close])
 
   // ─── render ──────────────────────────────────────────────────────────────────
   return (
@@ -189,25 +324,29 @@ export function CameraSearch({ onResult }) {
       <button
         id="camera-search-btn"
         onClick={startCamera}
-        title="Scan medicine label with Groq AI"
-        className="flex items-center gap-2 bg-blue-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-800 active:scale-95 transition-all duration-150 shadow-sm whitespace-nowrap"
+        title="Scan medicine label"
+        aria-label="Scan medicine label"
+        className={iconOnly
+          ? 'flex items-center justify-center cursor-pointer'
+          : 'flex items-center gap-2 bg-blue-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-800 active:scale-95 transition-all duration-150 shadow-sm whitespace-nowrap cursor-pointer'
+        }
       >
-        <CameraIcon size={17} />
-        <span className="hidden sm:inline text-sm">Scan</span>
+        <CameraIcon size={iconOnly ? 22 : 17} />
+        {!iconOnly && <span className="hidden sm:inline text-sm">Scan</span>}
       </button>
 
       {/* Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style={{maxHeight:'92vh'}}>
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            {/* Header — fixed */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-2">
-                <LightningIcon />
-                <h2 className="font-semibold text-gray-800 text-sm">AI Medicine Scanner</h2>
+                <ScanIcon />
+                <h2 className="font-semibold text-gray-800 text-sm">Medicine Label Scanner</h2>
                 <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-semibold tracking-wide">
-                  Groq · Free
+                  Groq · OCR
                 </span>
               </div>
               <button
@@ -218,7 +357,8 @@ export function CameraSearch({ onResult }) {
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            {/* Scrollable body */}
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
 
               {/* ── PREVIEW: live camera ── */}
               {state === S.PREVIEW && (
@@ -256,23 +396,30 @@ export function CameraSearch({ onResult }) {
                 </div>
               )}
 
-              {/* ── Captured image (ANALYZING / DONE / ERROR) ── */}
+              {/* ── Captured image (ANALYZING / MATCHING / DONE / ERROR) ── */}
               {imageSrc && state !== S.PREVIEW && (
                 <div className="space-y-3">
-                  <div className="rounded-xl overflow-hidden border border-gray-200 aspect-video bg-gray-900 relative">
+
+                  {/* Compact image — full size only while loading, thumbnail after */}
+                  <div className={`rounded-xl overflow-hidden border border-gray-200 bg-gray-900 relative ${
+                    state === S.ANALYZING || state === S.MATCHING ? 'aspect-video' : 'h-24'
+                  }`}>
                     <img src={imageSrc} alt="Captured" className="w-full h-full object-contain" />
 
-                    {/* Analyzing overlay */}
-                    {state === S.ANALYZING && (
-                      <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center gap-3">
+                    {/* Step overlays */}
+                    {(state === S.ANALYZING || state === S.MATCHING) && (
+                      <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
                         <div className="flex items-center gap-2.5 text-white">
                           <SpinnerIcon />
-                          <span className="text-sm font-medium">Analysing with Groq Vision…</span>
+                          <span className="text-sm font-medium">
+                            {state === S.ANALYZING ? 'Reading text from image…' : 'Matching against database…'}
+                          </span>
                         </div>
-                        {/* Groq speed indicator */}
                         <div className="flex items-center gap-1.5 text-orange-300 text-xs">
                           <LightningIcon size={12} />
-                          <span>Llama 4 Scout · Ultra-fast inference</span>
+                          <span>
+                            {state === S.ANALYZING ? 'Groq OCR · Extracting all text' : 'Fuzzy matching medicines'}
+                          </span>
                         </div>
                         <div className="w-44 h-1 bg-white/10 rounded-full overflow-hidden mt-1">
                           <div className="h-full bg-orange-400 rounded-full animate-shimmer" />
@@ -282,42 +429,79 @@ export function CameraSearch({ onResult }) {
                   </div>
 
                   {/* ── DONE ── */}
-                  {state === S.DONE && result && (
-                    <div className="space-y-3">
-                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-orange-600 uppercase tracking-wide flex items-center gap-1">
-                            <LightningIcon size={11} /> Groq Vision result
-                          </span>
-                          {result.confidence && (
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${confidenceBadge[result.confidence] ?? confidenceBadge.low}`}>
-                              {result.confidence} confidence
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-base font-bold text-gray-900 break-words leading-snug">
-                          {result.name || <span className="italic text-gray-400 font-normal text-sm">No medicine name detected</span>}
-                        </p>
-                        {result.details && (
-                          <p className="text-xs text-gray-500 leading-relaxed pt-0.5 border-t border-orange-100">{result.details}</p>
-                        )}
-                      </div>
+                  {state === S.DONE && (
+                    <div className="space-y-2">
 
-                      <div className="flex gap-2">
-                        <button
-                          onClick={startCamera}
-                          className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
-                        >
-                          🔄 Retake
-                        </button>
-                        <button
-                          onClick={useThisResult}
-                          disabled={!result.name}
-                          className="flex-1 bg-blue-700 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          🔍 Search this
-                        </button>
-                      </div>
+                      {/* Section header */}
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+                        <LightningIcon size={10} />
+                        {matches.length > 0 ? 'Best matches in your database — tap to select' : 'No matches found'}
+                      </p>
+
+                      {/* Match cards */}
+                      {matches.length > 0 ? (
+                        <div className="space-y-2">
+                          {matches.map((med, idx) => (
+                            <button
+                              key={med.id}
+                              onClick={() => selectMatch(med.name)}
+                              className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 border transition-all duration-150 group text-left ${
+                                idx === 0
+                                  ? 'bg-blue-50 border-blue-300 hover:bg-blue-100'
+                                  : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                              }`}
+                            >
+                              {/* Rank badge */}
+                              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                                idx === 0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {idx + 1}
+                              </span>
+
+                              {/* Medicine info */}
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-semibold text-sm truncate ${
+                                  idx === 0 ? 'text-blue-800' : 'text-gray-900 group-hover:text-blue-700'
+                                }`}>
+                                  {med.name}
+                                </p>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  ₹{med.price}
+                                  <span className={`ml-2 font-medium ${
+                                    med.quantity > 0 ? 'text-green-600' : 'text-red-500'
+                                  }`}>
+                                    {med.quantity > 0 ? '● In Stock' : '○ Out of Stock'}
+                                  </span>
+                                </p>
+                              </div>
+
+                              {/* Score + arrow */}
+                              <div className="flex-shrink-0 flex items-center gap-1.5">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  med.score >= 80 ? 'bg-green-100 text-green-700 border-green-200'
+                                  : med.score >= 50 ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                  : 'bg-gray-100 text-gray-500 border-gray-200'
+                                }`}>
+                                  {med.score}%
+                                </span>
+                                <ArrowRightIcon />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                          <p className="text-sm font-semibold text-amber-700">No matching medicines found</p>
+                          <p className="text-xs text-amber-500 mt-1">Try retaking with a clearer photo of the label.</p>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={startCamera}
+                        className="w-full border border-gray-200 text-gray-500 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                      >
+                        🔄 Retake photo
+                      </button>
                     </div>
                   )}
 
@@ -385,6 +569,17 @@ function CameraIcon({ size = 18 }) {
   )
 }
 
+function ScanIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className="text-blue-600">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M7 9h10M7 12h10M7 15h6" />
+    </svg>
+  )
+}
+
 function LightningIcon({ size = 14 }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
@@ -409,6 +604,16 @@ function SpinnerIcon() {
       fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
       className="animate-spin">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  )
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      className="text-gray-400 group-hover:text-blue-500 transition-colors">
+      <path d="M5 12h14M12 5l7 7-7 7" />
     </svg>
   )
 }
