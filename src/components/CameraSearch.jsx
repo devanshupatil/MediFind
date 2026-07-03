@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Groq from 'groq-sdk'
 import { supabase } from '../lib/supabase'
 
@@ -201,6 +201,9 @@ export function CameraSearch({ onResult, iconOnly = false }) {
   const canvasRef = useRef(null)
   const fileRef = useRef(null)
   const streamRef = useRef(null)
+  // Stable ref so processImage never goes stale when onResult prop changes
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
 
   // ── camera ──────────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -291,7 +294,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
 
       // Auto-select if there is exactly one strong match
       if (topMatches.length === 1 && topMatches[0].score >= 80) {
-        onResult(topMatches[0].name)
+        onResultRef.current(topMatches[0].name)
       }
     } catch (err) {
       setError(err.message.includes('NO_API_KEY')
@@ -299,7 +302,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
         : `Analysis failed: ${err.message}`)
       setState(S.ERROR)
     }
-  }, [onResult])
+  }, [])  // stable — onResult accessed via ref
 
   const selectMatch = useCallback((name) => {
     onResult(name)
@@ -315,7 +318,6 @@ export function CameraSearch({ onResult, iconOnly = false }) {
         id="camera-file-input"
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={onFileChange}
       />
@@ -382,13 +384,13 @@ export function CameraSearch({ onResult, iconOnly = false }) {
                   <div className="flex gap-2">
                     <button
                       onClick={() => fileRef.current?.click()}
-                      className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                      className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      📁 Upload photo
+                      <UploadIcon /> Upload photo
                     </button>
                     <button
                       onClick={capturePhoto}
-                      className="flex-1 bg-blue-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 bg-blue-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <CameraIcon size={15} /> Capture
                     </button>
@@ -498,9 +500,9 @@ export function CameraSearch({ onResult, iconOnly = false }) {
 
                       <button
                         onClick={startCamera}
-                        className="w-full border border-gray-200 text-gray-500 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                        className="w-full border border-gray-200 text-gray-500 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        🔄 Retake photo
+                        <RetryIcon /> Retake photo
                       </button>
                     </div>
                   )}
@@ -509,7 +511,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
                   {state === S.ERROR && (
                     <div className="space-y-3">
                       <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1">
-                        <p className="text-sm font-semibold text-red-700">⚠️ Analysis failed</p>
+                        <p className="text-sm font-semibold text-red-700 flex items-center gap-1.5"><WarningIcon /> Analysis failed</p>
                         <p className="text-xs text-red-500 leading-relaxed">{error}</p>
                         {error.includes('API key') && (
                           <a
@@ -523,11 +525,11 @@ export function CameraSearch({ onResult, iconOnly = false }) {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => fileRef.current?.click()} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50">
-                          📁 Upload photo
+                        <button onClick={() => fileRef.current?.click()} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 flex items-center justify-center gap-1.5 cursor-pointer">
+                          <UploadIcon /> Upload photo
                         </button>
-                        <button onClick={startCamera} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50">
-                          🔄 Retake
+                        <button onClick={startCamera} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm hover:bg-gray-50 flex items-center justify-center gap-1.5 cursor-pointer">
+                          <RetryIcon /> Retake
                         </button>
                       </div>
                     </div>
@@ -614,6 +616,37 @@ function ArrowRightIcon() {
       fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
       className="text-gray-400 group-hover:text-blue-500 transition-colors">
       <path d="M5 12h14M12 5l7 7-7 7" />
+    </svg>
+  )
+}
+
+function UploadIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  )
+}
+
+function RetryIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  )
+}
+
+function WarningIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   )
 }
