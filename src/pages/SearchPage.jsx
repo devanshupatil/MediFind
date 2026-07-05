@@ -1,10 +1,184 @@
 import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { CameraSearch } from '../components/CameraSearch'
 import { strings } from '../lib/strings'
-import { BackgroundScene } from '../components/BackgroundScene'
+import { CameraSearch } from '../components/CameraSearch'
 
 const PHONE = import.meta.env.VITE_SHOP_PHONE
+
+// ── SVG Icons ────────────────────────────────────────────────
+
+function IconSearch() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  )
+}
+
+function IconMic({ active }) {
+  return active ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="22" />
+      <line x1="8" y1="22" x2="16" y2="22" />
+    </svg>
+  )
+}
+
+function IconPill({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
+      <path d="m8.5 8.5 7 7" />
+    </svg>
+  )
+}
+
+function IconPhone() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.29 6.29l1.79-1.79a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  )
+}
+
+function IconEmpty() {
+  return (
+    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+      <path d="M11 8v3" strokeWidth="1.5" />
+      <circle cx="11" cy="14" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+// ── Floating decorative pill definitions ─────────────────────
+
+const FLOAT_PILLS = [
+  { width: 80,  height: 28, top: '10%',  left:  '6%',   delay: '0s',   duration: '6.5s', rotate: -25, opacity: 0.045 },
+  { width: 120, height: 38, top: '22%',  right: '8%',   delay: '1.8s', duration: '8.5s', rotate: 42,  opacity: 0.03  },
+  { width: 60,  height: 22, top: '58%',  left:  '4%',   delay: '0.9s', duration: '7s',   rotate: 15,  opacity: 0.05  },
+  { width: 100, height: 32, bottom:'18%',right: '5%',   delay: '2.2s', duration: '9s',   rotate: -38, opacity: 0.04  },
+  { width: 72,  height: 26, top: '38%',  left:  '14%',  delay: '3.1s', duration: '6s',   rotate: 60,  opacity: 0.035 },
+  { width: 90,  height: 30, bottom:'28%',right: '16%',  delay: '1.1s', duration: '7.8s', rotate: -52, opacity: 0.04  },
+]
+
+// ── Skeleton Card ─────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div className="sp-card sp-skeleton" aria-hidden="true">
+      <div className="sp-skel-line sp-skel-icon" />
+      <div className="sp-skel-line sp-skel-title" />
+      <div className="sp-skel-line sp-skel-sub" />
+      <div className="sp-skel-line sp-skel-price" />
+    </div>
+  )
+}
+
+// ── Stock Badge ───────────────────────────────────────────────
+
+function StockBadge({ quantity, s }) {
+  const qty = quantity ?? 0
+  if (qty === 0) {
+    return <span className="sp-badge sp-badge-danger">{s.outOfStock}</span>
+  }
+  if (qty <= 5) {
+    return (
+      <span className="sp-badge sp-badge-warning">
+        <span className="sp-dot" />
+        Low Stock
+      </span>
+    )
+  }
+  return (
+    <span className="sp-badge sp-badge-success">
+      <span className="sp-dot" />
+      {s.inStock}
+    </span>
+  )
+}
+
+// ── Medicine Card ─────────────────────────────────────────────
+
+function MedicineCard({ med, index, lang }) {
+  const s = strings[lang]
+  return (
+    <motion.article
+      className="sp-card"
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        delay: Math.min(index * 0.06, 0.42),
+        duration: 0.4,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+    >
+      <div className="sp-card-top">
+        <div className="sp-card-pill-icon">
+          <IconPill size={18} />
+        </div>
+        <StockBadge quantity={med.quantity} s={s} />
+      </div>
+
+      <h3 className="sp-card-name">{med.name}</h3>
+
+      <div className="sp-card-bottom">
+        <div className="sp-price">
+          <span className="sp-price-sym">₹</span>
+          <span className="sp-price-val">{med.price ?? '—'}</span>
+        </div>
+        {PHONE && (
+          <a
+            href={`tel:${PHONE}`}
+            className="sp-call-link"
+            aria-label={`Call store about ${med.name}`}
+          >
+            <IconPhone />
+          </a>
+        )}
+      </div>
+    </motion.article>
+  )
+}
+
+// ── Empty State ───────────────────────────────────────────────
+
+function EmptyState({ s }) {
+  return (
+    <motion.div
+      className="sp-empty"
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.35 }}
+    >
+      <div className="sp-empty-icon">
+        <IconEmpty />
+      </div>
+      <h3 className="sp-empty-heading">{s.noResults}</h3>
+      <p className="sp-empty-sub">{s.noResultsHint}</p>
+      {PHONE && (
+        <a href={`tel:${PHONE}`} className="sp-btn sp-btn-primary" aria-label="Call store">
+          <IconPhone />
+          {s.callBtn}
+        </a>
+      )}
+    </motion.div>
+  )
+}
+
+// ── Search Page ───────────────────────────────────────────────
 
 export function SearchPage() {
   const [medicines, setMedicines] = useState([])
@@ -13,6 +187,8 @@ export function SearchPage() {
   const [lang, setLang] = useState('hi')
   const [voiceState, setVoiceState] = useState('idle')
   const [voiceError, setVoiceError] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const recognitionRef = useRef(null)
 
   const s = strings[lang]
@@ -22,6 +198,12 @@ export function SearchPage() {
       if (data) setMedicines(data)
       setLoading(false)
     })
+  }, [])
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   const filtered = medicines.filter(m =>
@@ -63,229 +245,177 @@ export function SearchPage() {
     recognition.onend = () => setVoiceState('idle')
   }
 
+  const isListening = voiceState === 'listening'
+  const showEmpty = !loading && query !== '' && filtered.length === 0
+
   return (
-    <div className="min-h-screen bg-mesh relative overflow-x-hidden">
-      <BackgroundScene />
+    <div className="sp-root">
 
-      {/* ── GRADIENT HEADER ─────────────────────────────────────────────────── */}
-      <div className="relative bg-gradient-to-br from-blue-600 via-blue-700 to-violet-700 pb-28 px-4 pt-5 overflow-hidden">
-        {/* Depth orbs */}
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-10 -left-10 w-56 h-56 bg-violet-500/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/3 w-32 h-32 bg-blue-300/10 rounded-full blur-2xl" />
-        {/* Slow-shifting gradient overlay — creates breathing effect on header */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-blue-400/20 via-transparent to-violet-500/25 animate-gradient-breathe pointer-events-none" />
-
-        {/* Topbar */}
-        <div className="relative flex justify-between items-center max-w-lg mx-auto">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center border border-white/20 shadow-inner backdrop-blur-sm">
-              <PillIcon />
+      {/* ── Header ── */}
+      <header className={`sp-header${scrolled ? ' sp-header--scrolled' : ''}`}>
+        <div className="sp-header-inner">
+          <div className="sp-logo" aria-label="MediFind">
+            <div className="sp-logo-icon">
+              <IconPill size={18} />
             </div>
-            <span className="font-display font-bold text-[1.3rem] text-white tracking-tight">
-              MediFind
-            </span>
+            <span className="sp-logo-text">MediFind</span>
           </div>
+
           <button
+            className="sp-lang-btn"
             onClick={() => setLang(l => l === 'hi' ? 'en' : 'hi')}
-            aria-label="Toggle language"
-            className="bg-white/15 text-white px-3.5 py-1.5 rounded-full text-sm font-semibold hover:bg-white/25 transition-all duration-200 border border-white/20 backdrop-blur-sm cursor-pointer active:scale-95"
+            aria-label="Switch language between Hindi and English"
+            type="button"
           >
-            {lang === 'hi' ? 'हिं → EN' : 'EN → हिं'}
+            <span className={lang === 'hi' ? 'sp-lang-active' : 'sp-lang-dim'}>हिन्दी</span>
+            <span className="sp-lang-sep">/</span>
+            <span className={lang === 'en' ? 'sp-lang-active' : 'sp-lang-dim'}>EN</span>
           </button>
         </div>
+      </header>
 
-        {/* Hero text */}
-        <div className="relative max-w-lg mx-auto mt-7">
-          <p className="text-white/60 text-sm font-medium tracking-wide">{s.greeting}</p>
-          <h1 className="text-white font-display font-bold text-[1.9rem] mt-1 leading-tight">
-            {s.tagline}
-          </h1>
-        </div>
-      </div>
+      {/* ── Main ── */}
+      <main className="sp-main">
 
-      {/* ── GLASS SEARCH CARD ───────────────────────────────────────────────── */}
-      <div className="relative z-10 max-w-lg mx-auto px-4 -mt-16">
-        <div className="glass rounded-3xl shadow-2xl shadow-slate-900/[0.10] p-5 border border-white/70 ring-1 ring-black/[0.04]">
+        {/* Hero */}
+        <section className="sp-hero" aria-labelledby="sp-hero-title">
+          <div className="sp-hero-glow" aria-hidden="true" />
 
-          {/* Search input */}
-          <div className="relative">
-            <SearchInputIcon />
-            <input
-              type="text"
-              placeholder={s.searchPlaceholder}
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              className="w-full bg-slate-50/80 rounded-2xl pl-11 pr-4 py-3.5 text-base focus:outline-none focus:bg-white ring-1 ring-slate-200/70 focus:ring-2 focus:ring-blue-500/25 transition-all duration-200 placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Action buttons */}
-          <div className={`grid gap-2 mt-3 ${PHONE ? 'grid-cols-3' : 'grid-cols-2'}`}>
-            {/* Voice */}
-            <button
-              onClick={voiceState === 'listening' ? stopVoice : startVoice}
-              aria-label={voiceState === 'listening' ? 'Stop listening' : 'Start voice search'}
-              className={`flex flex-col items-center justify-center gap-2 py-3.5 rounded-2xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-95 ${
-                voiceState === 'listening'
-                  ? 'bg-gradient-to-b from-red-500 to-red-600 text-white shadow-lg shadow-red-300/50 animate-pulse'
-                  : 'bg-gradient-to-b from-red-50 to-red-100/80 text-red-600 border border-red-200/60 hover:from-red-100 hover:to-red-200/80 hover:shadow-sm hover:shadow-red-200/60'
-              }`}
-            >
-              <MicIcon />
-              <span className="leading-none">{voiceState === 'listening' ? s.voiceListening : s.voiceBtn}</span>
-            </button>
-
-            {/* Camera scan */}
-            <div
-              onClickCapture={() => voiceState === 'listening' && stopVoice()}
-              className="flex flex-col items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-b from-blue-50 to-blue-100/80 text-blue-700 border border-blue-200/60 cursor-pointer hover:from-blue-100 hover:to-blue-200/80 hover:shadow-sm hover:shadow-blue-200/60 active:scale-95 transition-all duration-200"
-            >
-              <CameraSearch onResult={name => setQuery(name)} iconOnly />
-              <span className="text-xs font-bold leading-none">{s.scanBtn}</span>
-            </div>
-
-            {/* Call */}
-            {PHONE && (
-              <a
-                href={`tel:${PHONE}`}
-                aria-label="Call the store"
-                className="flex flex-col items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-b from-emerald-50 to-emerald-100/80 text-emerald-700 border border-emerald-200/60 cursor-pointer hover:from-emerald-100 hover:to-emerald-200/80 hover:shadow-sm hover:shadow-emerald-200/60 active:scale-95 transition-all duration-200"
-              >
-                <PhoneIcon />
-                <span className="text-xs font-bold leading-none">{s.callBtn}</span>
-              </a>
-            )}
-          </div>
-
-          {voiceError && (
-            <p className="text-red-500 text-xs text-center mt-2.5 font-medium">{voiceError}</p>
-          )}
-        </div>
-      </div>
-
-      {/* ── RESULTS ─────────────────────────────────────────────────────────── */}
-      <div className="relative z-10 max-w-lg mx-auto px-4 mt-5 pb-14">
-        {loading ? (
-          <div className="space-y-2.5">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white/80 rounded-2xl px-5 py-4 shadow-sm border border-gray-100 animate-pulse flex justify-between items-center">
-                <div>
-                  <div className="h-4 bg-slate-200/80 rounded-lg w-40 mb-2" />
-                  <div className="h-3 bg-slate-200/80 rounded-lg w-16" />
-                </div>
-                <div className="h-7 bg-slate-200/80 rounded-full w-22" />
-              </div>
+          {/* Decorative floating pills */}
+          <div className="sp-float-pills" aria-hidden="true">
+            {FLOAT_PILLS.map((pill, i) => (
+              <div
+                key={i}
+                className="sp-float-pill"
+                style={{
+                  width:    pill.width,
+                  height:   pill.height,
+                  top:      pill.top,
+                  left:     pill.left,
+                  right:    pill.right,
+                  bottom:   pill.bottom,
+                  opacity:  pill.opacity,
+                  transform: `rotate(${pill.rotate}deg)`,
+                  animationDelay:    pill.delay,
+                  animationDuration: pill.duration,
+                }}
+              />
             ))}
           </div>
-        ) : query && filtered.length === 0 ? (
-          <div className="text-center py-16 animate-fade-up">
-            <SearchEmptyIcon />
-            <p className="text-gray-800 font-display font-bold text-xl mt-5">{s.noResults}</p>
-            <p className="text-gray-400 text-sm mt-2 leading-relaxed">{s.noResultsHint}</p>
+
+          {/* Headline */}
+          <div className="sp-hero-content">
+            <motion.h1
+              id="sp-hero-title"
+              className="sp-hero-title"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            >
+              Find Any Medicine,<br />Instantly
+            </motion.h1>
+            <motion.p
+              className="sp-hero-sub"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.5 }}
+            >
+              AI-powered search &amp; live inventory — speak, scan, or type
+            </motion.p>
           </div>
-        ) : (
-          <>
-            {filtered.length > 0 && (
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex-1 h-px bg-slate-200/60" />
-                <span className="text-xs text-slate-400 font-semibold whitespace-nowrap">
-                  {filtered.length} {lang === 'hi' ? 'दवाइयाँ' : 'medicines'}
-                </span>
-                <div className="flex-1 h-px bg-slate-200/60" />
+
+          {/* Search Bar */}
+          <motion.div
+            className="sp-search-outer"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28, duration: 0.5 }}
+          >
+            <div
+              className={`sp-search-bar${searchFocused ? ' sp-search-bar--focused' : ''}`}
+              role="search"
+            >
+              <span className="sp-search-icon">
+                <IconSearch />
+              </span>
+
+              <input
+                type="text"
+                className="sp-search-input"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={s.searchPlaceholder}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                aria-label={s.searchPlaceholder}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+              />
+
+              <button
+                className={`sp-voice-btn${isListening ? ' sp-voice-btn--active' : ''}`}
+                onClick={isListening ? stopVoice : startVoice}
+                aria-label={isListening ? s.voiceListening : s.voiceBtn}
+                aria-pressed={isListening}
+                type="button"
+              >
+                {isListening && <span className="sp-voice-ring" aria-hidden="true" />}
+                <IconMic active={isListening} />
+              </button>
+
+              <div className="sp-scan-wrap">
+                <CameraSearch onResult={name => setQuery(name)} />
               </div>
-            )}
-            <ul className="space-y-2.5">
-              {filtered.map((m, i) => (
-                <MedicineCard key={m.id} medicine={m} s={s} index={i} />
+            </div>
+
+            <AnimatePresence>
+              {voiceError && (
+                <motion.p
+                  className="sp-voice-error"
+                  role="alert"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {voiceError}
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </section>
+
+        {/* Results */}
+        <section className="sp-results" aria-label="Medicine search results" aria-live="polite">
+          {loading ? (
+            <div className="sp-grid" aria-label="Loading medicines">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
               ))}
-            </ul>
-          </>
-        )}
-      </div>
+            </div>
+          ) : showEmpty ? (
+            <EmptyState s={s} />
+          ) : (
+            <div className="sp-grid">
+              {filtered.map((med, i) => (
+                <MedicineCard key={med.id} med={med} index={i} lang={lang} />
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="sp-footer">
+        <div className="sp-footer-inner">
+          <span className="sp-footer-brand" aria-label="MediFind">
+            <IconPill size={14} />
+            MediFind
+          </span>
+          <span className="sp-footer-tagline">AI-powered · Real-time inventory</span>
+        </div>
+      </footer>
+
     </div>
-  )
-}
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-function MedicineCard({ medicine: m, s, index }) {
-  return (
-    <li
-      className="relative bg-white rounded-2xl pl-5 pr-4 py-4 flex justify-between items-center border border-gray-100/80 shadow-sm hover:shadow-xl hover:shadow-slate-200/70 hover:-translate-y-0.5 hover:border-slate-200 transition-all duration-300 overflow-hidden animate-fade-up"
-      style={{ animationDelay: `${index * 55}ms` }}
-    >
-      {/* Stock-status accent bar */}
-      <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${m.quantity > 0 ? 'bg-emerald-400' : 'bg-red-400'}`} />
-
-      <div className="ml-2">
-        <p className="font-display font-semibold text-gray-900 text-base leading-tight">{m.name}</p>
-        <p className="text-sm text-slate-400 mt-0.5 font-medium">₹{m.price}</p>
-      </div>
-
-      {m.quantity > 0 ? (
-        <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full border border-emerald-100/80 whitespace-nowrap flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-          {s.inStock}
-        </span>
-      ) : (
-        <span className="flex items-center gap-1.5 bg-red-50 text-red-600 text-sm font-semibold px-3 py-1.5 rounded-full border border-red-100/80 whitespace-nowrap flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-          {s.outOfStock}
-        </span>
-      )}
-    </li>
-  )
-}
-
-// ── Icons ──────────────────────────────────────────────────────────────────────
-function PillIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-      className="text-white flex-shrink-0">
-      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
-      <path d="M8.5 8.5 15.5 15.5" />
-    </svg>
-  )
-}
-
-function SearchInputIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  )
-}
-
-function MicIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="2" width="6" height="11" rx="3" />
-      <path d="M5 10a7 7 0 0 0 14 0" />
-      <line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" />
-    </svg>
-  )
-}
-
-function PhoneIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.1 11.91 19.79 19.79 0 0 1 1.07 3.28 2 2 0 0 1 3 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6.72 6.72l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  )
-}
-
-function SearchEmptyIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={60} height={60} viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
-      className="text-slate-300 mx-auto">
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-      <line x1="8" y1="11" x2="14" y2="11" />
-    </svg>
   )
 }
