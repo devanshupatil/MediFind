@@ -226,6 +226,19 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     e.target.value = ''
   }, [])
 
+  const toJpeg = useCallback((dataUrl) => new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d').drawImage(img, 0, 0)
+      resolve(canvas.toDataURL('image/jpeg', 0.92))
+    }
+    img.onerror = reject
+    img.src = dataUrl
+  }), [])
+
   const processImage = useCallback(async (dataUrl) => {
     setImageSrc(dataUrl)
     setState(S.ANALYZING)
@@ -240,10 +253,19 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     }
 
     try {
-      const [meta, base64] = dataUrl.split(',')
-      const mimeType = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg'
-      const extracted = await extractTextFromImage(base64, mimeType)
+      const mimeType = dataUrl.split(',')[0].match(/:(.*?);/)?.[1] ?? 'image/jpeg'
+      const jpegUrl = (mimeType === 'image/jpeg' || mimeType === 'image/png')
+        ? dataUrl
+        : await toJpeg(dataUrl)
+      const base64 = jpegUrl.split(',')[1]
+      const extracted = await extractTextFromImage(base64, 'image/jpeg')
       setOcrData(extracted)
+
+      if (extracted.nameCandidates.length === 0 && extracted.allText.length === 0) {
+        setError('No label text found. Point the camera at the medicine name on the box or strip — not the pill side.')
+        setState(S.ERROR)
+        return
+      }
 
       setState(S.MATCHING)
       const topMatches = await findMatchingMedicines(extracted)
@@ -356,7 +378,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
                 {matches.length === 0 ? (
                   <div className="cs-no-match">
                     <p className="cs-no-match-title">No medicines found</p>
-                    <p className="cs-no-match-sub">Try better lighting or type the name</p>
+                    <p className="cs-no-match-sub">Label was read but medicine not in inventory — try typing the name</p>
                   </div>
                 ) : (
                   <>
