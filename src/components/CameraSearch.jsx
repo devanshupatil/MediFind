@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Groq from 'groq-sdk'
 import { supabase } from '../lib/supabase'
 
@@ -277,7 +278,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
         <span>Scan</span>
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div className="cs-backdrop" role="dialog" aria-modal="true" aria-label="Medicine scanner">
 
           <div className="cs-modal">
@@ -407,7 +408,8 @@ export function CameraSearch({ onResult, iconOnly = false }) {
             )}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
