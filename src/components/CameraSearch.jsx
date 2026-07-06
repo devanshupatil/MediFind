@@ -117,17 +117,18 @@ function scoreMatch(medicineName, nameCandidates, allText) {
   return best
 }
 
-async function findMatchingMedicines({ nameCandidates, allText }, limit = 5) {
-  const { data, error } = await supabase.from('medicines').select('*')
+async function fetchMedicines() {
+  const { data, error } = await supabase
+    .from('medicines')
+    .select('id,name,price,quantity')
   if (error) throw new Error(error.message)
-  if (!data || data.length === 0) return []
+  return data ?? []
+}
 
-  const scored = data.map(med => ({
-    ...med,
-    score: scoreMatch(med.name, nameCandidates, allText),
-  }))
-
-  return scored
+function findMatchingMedicines({ nameCandidates, allText }, medicines, limit = 5) {
+  if (!medicines.length) return []
+  return medicines
+    .map(med => ({ ...med, score: scoreMatch(med.name, nameCandidates, allText) }))
     .filter(m => m.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -226,11 +227,16 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
   const toJpeg = useCallback((dataUrl) => new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
+      const MAX = 1000
+      let w = img.naturalWidth, h = img.naturalHeight
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+        else       { w = Math.round(w * MAX / h); h = MAX }
+      }
       const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      canvas.getContext('2d').drawImage(img, 0, 0)
-      resolve(canvas.toDataURL('image/jpeg', 0.92))
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.80))
     }
     img.onerror = reject
     img.src = dataUrl
@@ -251,7 +257,12 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     try {
       const jpegUrl = await toJpeg(dataUrl)
       const base64 = jpegUrl.split(',')[1]
-      const extracted = await extractTextFromImage(base64, 'image/jpeg')
+
+      // Fire OCR and medicine fetch in parallel
+      const [extracted, medicines] = await Promise.all([
+        extractTextFromImage(base64, 'image/jpeg'),
+        fetchMedicines(),
+      ])
       setOcrData(extracted)
 
       if (extracted.nameCandidates.length === 0 && extracted.allText.length === 0) {
@@ -261,7 +272,7 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
       }
 
       setState(S.MATCHING)
-      const topMatches = await findMatchingMedicines(extracted)
+      const topMatches = findMatchingMedicines(extracted, medicines)
       onScanCompleteRef.current(jpegUrl, topMatches)
       close()
     } catch (err) {
