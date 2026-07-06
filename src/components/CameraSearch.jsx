@@ -144,20 +144,19 @@ function IconCameraSVG() {
   )
 }
 
-export function CameraSearch({ onResult, iconOnly = false }) {
+export function CameraSearch({ onScanComplete, iconOnly = false }) {
   const [state, setState] = useState(S.IDLE)
   const [isOpen, setIsOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState(null)
   const [ocrData, setOcrData] = useState({ nameCandidates: [], allText: [] })
-  const [matches, setMatches] = useState([])
   const [error, setError] = useState('')
 
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileRef = useRef(null)
   const streamRef = useRef(null)
-  const onResultRef = useRef(onResult)
-  useEffect(() => { onResultRef.current = onResult }, [onResult])
+  const onScanCompleteRef = useRef(onScanComplete)
+  useEffect(() => { onScanCompleteRef.current = onScanComplete }, [onScanComplete])
 
   useEffect(() => {
     if (isOpen) {
@@ -178,7 +177,6 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     setState(S.PREVIEW)
     setImageSrc(null)
     setOcrData({ nameCandidates: [], allText: [] })
-    setMatches([])
     setError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -198,7 +196,6 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     setState(S.IDLE)
     setImageSrc(null)
     setOcrData({ nameCandidates: [], allText: [] })
-    setMatches([])
     setError('')
   }, [stopCamera])
 
@@ -243,7 +240,6 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     setImageSrc(dataUrl)
     setState(S.ANALYZING)
     setOcrData({ nameCandidates: [], allText: [] })
-    setMatches([])
     setError('')
 
     if (!isKeyReady) {
@@ -266,24 +262,15 @@ export function CameraSearch({ onResult, iconOnly = false }) {
 
       setState(S.MATCHING)
       const topMatches = await findMatchingMedicines(extracted)
-      setMatches(topMatches)
-      setState(S.DONE)
-
-      if (topMatches.length === 1 && topMatches[0].score >= 80) {
-        onResultRef.current(topMatches[0].name)
-      }
+      onScanCompleteRef.current(jpegUrl, topMatches)
+      close()
     } catch (err) {
       setError(err.message.includes('NO_API_KEY')
         ? 'Groq API key not configured.'
         : `Analysis failed: ${err.message}`)
       setState(S.ERROR)
     }
-  }, [])
-
-  const selectMatch = useCallback((name) => {
-    onResult(name)
-    close()
-  }, [onResult, close])
+  }, [close, toJpeg])
 
   const isProcessing = state === S.ANALYZING || state === S.MATCHING
 
@@ -307,10 +294,9 @@ export function CameraSearch({ onResult, iconOnly = false }) {
               <div className="cs-header-left">
                 <div className="cs-logo-dot" aria-hidden="true" />
                 <span className="cs-title">
-                  {state === S.PREVIEW   && 'Scan Label'}
-                  {isProcessing          && 'Analysing…'}
-                  {state === S.DONE      && 'Results'}
-                  {state === S.ERROR     && 'Try Again'}
+                  {state === S.PREVIEW && 'Scan Label'}
+                  {isProcessing        && 'Analysing…'}
+                  {state === S.ERROR   && 'Try Again'}
                 </span>
               </div>
               <button className="cs-close-btn" onClick={close} aria-label="Close scanner" type="button">
@@ -368,47 +354,6 @@ export function CameraSearch({ onResult, iconOnly = false }) {
               </div>
             )}
 
-            {/* ── Results ── */}
-            {state === S.DONE && (
-              <div className="cs-results">
-                {imageSrc && <img src={imageSrc} alt="Scanned label" className="cs-thumb" />}
-                {matches.length === 0 ? (
-                  <div className="cs-no-match">
-                    <p className="cs-no-match-title">No medicines found</p>
-                    <p className="cs-no-match-sub">Label was read but medicine not in inventory — try typing the name</p>
-                  </div>
-                ) : (
-                  <>
-                    <p className="cs-results-label">
-                      {matches.length} match{matches.length !== 1 ? 'es' : ''} found
-                    </p>
-                    <ul className="cs-match-list">
-                      {matches.map((m, i) => (
-                        <li key={m.id}>
-                          <button className="cs-match-btn" onClick={() => selectMatch(m.name)} type="button">
-                            <div className="cs-match-info">
-                              <span className="cs-match-name">{m.name}</span>
-                              <div className="cs-match-bar">
-                                <div className="cs-match-fill" style={{ width: `${m.score}%` }} />
-                              </div>
-                            </div>
-                            <div className="cs-match-right">
-                              <span className="cs-match-score">{m.score}%</span>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="m9 18 6-6-6-6"/>
-                              </svg>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                <div className="cs-results-footer">
-                  <button className="cs-retry-btn" onClick={startCamera} type="button">Scan Again</button>
-                </div>
-              </div>
-            )}
 
             {/* ── Error ── */}
             {state === S.ERROR && (
