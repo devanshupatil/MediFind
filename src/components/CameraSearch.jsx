@@ -158,6 +158,15 @@ export function CameraSearch({ onResult, iconOnly = false }) {
   const onResultRef = useRef(onResult)
   useEffect(() => { onResultRef.current = onResult }, [onResult])
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
+
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
