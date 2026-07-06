@@ -253,10 +253,7 @@ export function CameraSearch({ onResult, iconOnly = false }) {
     }
 
     try {
-      const mimeType = dataUrl.split(',')[0].match(/:(.*?);/)?.[1] ?? 'image/jpeg'
-      const jpegUrl = (mimeType === 'image/jpeg' || mimeType === 'image/png')
-        ? dataUrl
-        : await toJpeg(dataUrl)
+      const jpegUrl = await toJpeg(dataUrl)
       const base64 = jpegUrl.split(',')[1]
       const extracted = await extractTextFromImage(base64, 'image/jpeg')
       setOcrData(extracted)
