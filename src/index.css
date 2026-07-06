@@ -227,31 +227,46 @@
   background-clip: text;
 }
 
-/* Language Toggle */
-.sp-lang-btn {
+/* Language Switcher — pill group */
+.sp-lang-switcher {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-full);
-  border: 1.5px solid var(--color-border);
+  gap: var(--space-1);
   background: var(--color-surface);
-  cursor: pointer;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  box-shadow: var(--shadow-sm);
+}
+
+.sp-lang-pill {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
   font-size: var(--text-sm);
   font-weight: 500;
   font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.sp-lang-pill:hover:not(.sp-lang-pill--active) {
   color: var(--color-text-secondary);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  background: var(--color-surface-2);
 }
 
-.sp-lang-btn:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-glow);
+.sp-lang-pill--active {
+  background: var(--gradient-brand);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px var(--color-primary-glow);
 }
-
-.sp-lang-active { color: var(--color-primary); font-weight: 700; }
-.sp-lang-dim    { color: var(--color-text-muted); }
-.sp-lang-sep    { color: var(--color-text-muted); margin: 0 2px; }
 
 /* ─────────────────────────────────────────────────────────
    MAIN & HERO
@@ -616,7 +631,24 @@
   color: var(--color-text-primary);
   line-height: 1.3;
   letter-spacing: -0.01em;
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-2);
+  transition: opacity var(--transition-fast);
+}
+
+/* Subtle pulse while async translation is in-flight */
+.sp-card-name--translating {
+  opacity: 0.55;
+  animation: sp-stock-dot 1.2s ease-in-out infinite;
+}
+
+/* Original English name shown as a dim subtitle */
+.sp-card-name-original {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  margin-bottom: var(--space-4);
+  margin-top: 0;
 }
 
 .sp-card-bottom {
@@ -1303,6 +1335,6 @@
   .sp-root, .sp-float-pill, .sp-voice-ring, .sp-dot,
   .sp-skel-line, .sp-badge, #camera-search-btn { animation: none; }
   .sp-card, .sp-voice-btn, #camera-search-btn,
-  .sp-call-link, .sp-lang-btn, .sp-search-bar { transition: none; }
+  .sp-call-link, .sp-lang-pill, .sp-search-bar { transition: none; }
   .sp-card:hover .sp-card-pill-icon { animation: none; }
 }
