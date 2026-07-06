@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
-import { strings } from '../lib/strings'
 import { CameraSearch } from '../components/CameraSearch'
+import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { useTranslatedName, translationCache } from '../hooks/useTranslatedName'
 
 const PHONE = import.meta.env.VITE_SHOP_PHONE
 
@@ -89,31 +91,36 @@ function SkeletonCard() {
 
 // ── Stock Badge ───────────────────────────────────────────────
 
-function StockBadge({ quantity, s }) {
+function StockBadge({ quantity }) {
+  const { t } = useTranslation()
   const qty = quantity ?? 0
   if (qty === 0) {
-    return <span className="sp-badge sp-badge-danger">{s.outOfStock}</span>
+    return <span className="sp-badge sp-badge-danger">{t('outOfStock')}</span>
   }
   if (qty <= 5) {
     return (
       <span className="sp-badge sp-badge-warning">
         <span className="sp-dot" />
-        Low Stock
+        {t('lowStock')}
       </span>
     )
   }
   return (
     <span className="sp-badge sp-badge-success">
       <span className="sp-dot" />
-      {s.inStock}
+      {t('inStock')}
     </span>
   )
 }
 
 // ── Medicine Card ─────────────────────────────────────────────
 
-function MedicineCard({ med, index, lang }) {
-  const s = strings[lang]
+function MedicineCard({ med, index }) {
+  const { t, i18n } = useTranslation()
+  const lang = i18n.language?.split('-')[0] ?? 'en'
+  const translatedName = useTranslatedName(med.name)
+  const isTranslating = translatedName === med.name && lang !== 'en'
+
   return (
     <motion.article
       className="sp-card"
@@ -129,10 +136,15 @@ function MedicineCard({ med, index, lang }) {
         <div className="sp-card-pill-icon">
           <IconPill size={18} />
         </div>
-        <StockBadge quantity={med.quantity} s={s} />
+        <StockBadge quantity={med.quantity} />
       </div>
 
-      <h3 className="sp-card-name">{med.name}</h3>
+      <h3 className={`sp-card-name${isTranslating ? ' sp-card-name--translating' : ''}`}>
+        {translatedName}
+      </h3>
+      {lang !== 'en' && translatedName !== med.name && (
+        <p className="sp-card-name-original">{med.name}</p>
+      )}
 
       <div className="sp-card-bottom">
         <div className="sp-price">
@@ -143,7 +155,7 @@ function MedicineCard({ med, index, lang }) {
           <a
             href={`tel:${PHONE}`}
             className="sp-call-link"
-            aria-label={`Call store about ${med.name}`}
+            aria-label={t('ariaCallStoreAbout', { name: med.name })}
           >
             <IconPhone />
           </a>
@@ -155,7 +167,8 @@ function MedicineCard({ med, index, lang }) {
 
 // ── Empty State ───────────────────────────────────────────────
 
-function EmptyState({ s }) {
+function EmptyState() {
+  const { t } = useTranslation()
   return (
     <motion.div
       className="sp-empty"
@@ -166,12 +179,12 @@ function EmptyState({ s }) {
       <div className="sp-empty-icon">
         <IconEmpty />
       </div>
-      <h3 className="sp-empty-heading">{s.noResults}</h3>
-      <p className="sp-empty-sub">{s.noResultsHint}</p>
+      <h3 className="sp-empty-heading">{t('noResults')}</h3>
+      <p className="sp-empty-sub">{t('noResultsHint')}</p>
       {PHONE && (
-        <a href={`tel:${PHONE}`} className="sp-btn sp-btn-primary" aria-label="Call store">
+        <a href={`tel:${PHONE}`} className="sp-btn sp-btn-primary" aria-label={t('ariaCallStore')}>
           <IconPhone />
-          {s.callBtn}
+          {t('callBtn')}
         </a>
       )}
     </motion.div>
@@ -181,18 +194,16 @@ function EmptyState({ s }) {
 // ── Search Page ───────────────────────────────────────────────
 
 export function SearchPage() {
+  const { t, i18n } = useTranslation()
   const [medicines, setMedicines] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
-  const [lang, setLang] = useState('hi')
   const [voiceState, setVoiceState] = useState('idle')
   const [voiceError, setVoiceError] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [scanData, setScanData] = useState(null)
   const recognitionRef = useRef(null)
-
-  const s = strings[lang]
 
   useEffect(() => {
     supabase.from('medicines').select('*').then(({ data }) => {
@@ -207,9 +218,19 @@ export function SearchPage() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const filtered = medicines.filter(m =>
-    m.name.toLowerCase().includes(query.toLowerCase())
-  )
+  const lang = i18n.language?.split('-')[0] ?? 'en'
+  const filtered = medicines.filter(m => {
+    const q = query.toLowerCase()
+    if (!q) return true
+    // Always match on original English name
+    if (m.name.toLowerCase().includes(q)) return true
+    // Also match on translated name if already cached
+    if (lang !== 'en') {
+      const cached = translationCache.get(`${lang}:${m.name}`)
+      if (cached && cached.toLowerCase().includes(q)) return true
+    }
+    return false
+  })
 
   const stopVoice = () => {
     recognitionRef.current?.abort()
@@ -220,12 +241,13 @@ export function SearchPage() {
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
-      setVoiceError(s.voiceUnsupported)
+      setVoiceError(t('voiceUnsupported'))
       setTimeout(() => setVoiceError(''), 3000)
       return
     }
     const recognition = new SR()
-    recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN'
+    const langCode = i18n.language?.split('-')[0] ?? 'en'
+    recognition.lang = langCode === 'hi' ? 'hi-IN' : langCode === 'mr' ? 'mr-IN' : 'en-IN'
     recognition.interimResults = false
     recognitionRef.current = recognition
     setVoiceState('listening')
@@ -240,7 +262,7 @@ export function SearchPage() {
     }
     recognition.onerror = () => {
       setVoiceState('idle')
-      setVoiceError(s.voiceUnsupported)
+      setVoiceError(t('voiceUnsupported'))
       setTimeout(() => setVoiceError(''), 3000)
     }
     recognition.onend = () => setVoiceState('idle')
@@ -262,16 +284,7 @@ export function SearchPage() {
             <span className="sp-logo-text">MediFind</span>
           </div>
 
-          <button
-            className="sp-lang-btn"
-            onClick={() => setLang(l => l === 'hi' ? 'en' : 'hi')}
-            aria-label="Switch language between Hindi and English"
-            type="button"
-          >
-            <span className={lang === 'hi' ? 'sp-lang-active' : 'sp-lang-dim'}>हिन्दी</span>
-            <span className="sp-lang-sep">/</span>
-            <span className={lang === 'en' ? 'sp-lang-active' : 'sp-lang-dim'}>EN</span>
-          </button>
+          <LanguageSwitcher />
         </div>
       </header>
 
@@ -313,7 +326,7 @@ export function SearchPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
             >
-              Find Any Medicine,<br />Instantly
+              {t('heroTitle')}
             </motion.h1>
             <motion.p
               className="sp-hero-sub"
@@ -321,7 +334,7 @@ export function SearchPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15, duration: 0.5 }}
             >
-              AI-powered search &amp; live inventory — speak, scan, or type
+              {t('heroSub')}
             </motion.p>
           </div>
 
@@ -345,10 +358,10 @@ export function SearchPage() {
                 className="sp-search-input"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={s.searchPlaceholder}
+                placeholder={t('searchPlaceholder')}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
-                aria-label={s.searchPlaceholder}
+                aria-label={t('searchPlaceholder')}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck="false"
@@ -357,7 +370,7 @@ export function SearchPage() {
               <button
                 className={`sp-voice-btn${isListening ? ' sp-voice-btn--active' : ''}`}
                 onClick={isListening ? stopVoice : startVoice}
-                aria-label={isListening ? s.voiceListening : s.voiceBtn}
+                aria-label={isListening ? t('voiceListening') : t('voiceBtn')}
                 aria-pressed={isListening}
                 type="button"
               >
@@ -391,31 +404,31 @@ export function SearchPage() {
 
         {/* Scan Results */}
         {scanData && (
-          <section className="sp-scan-results" aria-label="Scan results">
+          <section className="sp-scan-results" aria-label={t('scanBtn')}>
             <div className="sp-scan-header">
               <div className="sp-scan-image-wrap">
-                <img src={scanData.imageSrc} alt="Scanned medicine label" className="sp-scan-image" />
+                <img src={scanData.imageSrc} alt={t('scanBasedOn')} className="sp-scan-image" />
               </div>
               <div className="sp-scan-meta">
                 <p className="sp-scan-title">
                   {scanData.matches.length > 0
-                    ? `${scanData.matches.length} match${scanData.matches.length !== 1 ? 'es' : ''} found`
-                    : 'No medicines matched'}
+                    ? t('scanMatchesFound_other', { count: scanData.matches.length })
+                    : t('scanNoMatch')}
                 </p>
                 <p className="sp-scan-sub">
                   {scanData.matches.length > 0
-                    ? 'Based on your scanned label'
-                    : 'Label was read but no medicines in inventory matched'}
+                    ? t('scanBasedOn')
+                    : t('scanNoMatchHint')}
                 </p>
                 <button className="sp-scan-clear" onClick={() => setScanData(null)} type="button">
-                  Clear scan
+                  {t('scanClear')}
                 </button>
               </div>
             </div>
             {scanData.matches.length > 0 && (
               <div className="sp-grid">
                 {scanData.matches.map((med, i) => (
-                  <MedicineCard key={med.id} med={med} index={i} lang={lang} />
+                  <MedicineCard key={med.id} med={med} index={i} />
                 ))}
               </div>
             )}
@@ -424,19 +437,19 @@ export function SearchPage() {
 
         {/* Search Results */}
         {!scanData && (
-          <section className="sp-results" aria-label="Medicine search results" aria-live="polite">
+          <section className="sp-results" aria-label={t('ariaSearchResults')} aria-live="polite">
             {loading ? (
-              <div className="sp-grid" aria-label="Loading medicines">
+              <div className="sp-grid" aria-label={t('ariaLoadingMedicines')}>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <SkeletonCard key={i} />
                 ))}
               </div>
             ) : showEmpty ? (
-              <EmptyState s={s} />
+              <EmptyState />
             ) : (
               <div className="sp-grid">
                 {filtered.map((med, i) => (
-                  <MedicineCard key={med.id} med={med} index={i} lang={lang} />
+                  <MedicineCard key={med.id} med={med} index={i} />
                 ))}
               </div>
             )}
@@ -451,7 +464,7 @@ export function SearchPage() {
             <IconPill size={14} />
             MediFind
           </span>
-          <span className="sp-footer-tagline">AI-powered · Real-time inventory</span>
+          <span className="sp-footer-tagline">{t('footerTagline')}</span>
         </div>
       </footer>
 
