@@ -189,6 +189,7 @@ export function SearchPage() {
   const [voiceError, setVoiceError] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [scanData, setScanData] = useState(null)
   const recognitionRef = useRef(null)
 
   const s = strings[lang]
@@ -365,7 +366,10 @@ export function SearchPage() {
               </button>
 
               <div className="sp-scan-wrap">
-                <CameraSearch onResult={name => setQuery(name)} />
+                <CameraSearch onScanComplete={(src, matches) => {
+                  setScanData({ imageSrc: src, matches })
+                  setQuery('')
+                }} />
               </div>
             </div>
 
@@ -385,24 +389,59 @@ export function SearchPage() {
           </motion.div>
         </section>
 
-        {/* Results */}
-        <section className="sp-results" aria-label="Medicine search results" aria-live="polite">
-          {loading ? (
-            <div className="sp-grid" aria-label="Loading medicines">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
+        {/* Scan Results */}
+        {scanData && (
+          <section className="sp-scan-results" aria-label="Scan results">
+            <div className="sp-scan-header">
+              <div className="sp-scan-image-wrap">
+                <img src={scanData.imageSrc} alt="Scanned medicine label" className="sp-scan-image" />
+              </div>
+              <div className="sp-scan-meta">
+                <p className="sp-scan-title">
+                  {scanData.matches.length > 0
+                    ? `${scanData.matches.length} match${scanData.matches.length !== 1 ? 'es' : ''} found`
+                    : 'No medicines matched'}
+                </p>
+                <p className="sp-scan-sub">
+                  {scanData.matches.length > 0
+                    ? 'Based on your scanned label'
+                    : 'Label was read but no medicines in inventory matched'}
+                </p>
+                <button className="sp-scan-clear" onClick={() => setScanData(null)} type="button">
+                  Clear scan
+                </button>
+              </div>
             </div>
-          ) : showEmpty ? (
-            <EmptyState s={s} />
-          ) : (
-            <div className="sp-grid">
-              {filtered.map((med, i) => (
-                <MedicineCard key={med.id} med={med} index={i} lang={lang} />
-              ))}
-            </div>
-          )}
-        </section>
+            {scanData.matches.length > 0 && (
+              <div className="sp-grid">
+                {scanData.matches.map((med, i) => (
+                  <MedicineCard key={med.id} med={med} index={i} lang={lang} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Search Results */}
+        {!scanData && (
+          <section className="sp-results" aria-label="Medicine search results" aria-live="polite">
+            {loading ? (
+              <div className="sp-grid" aria-label="Loading medicines">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : showEmpty ? (
+              <EmptyState s={s} />
+            ) : (
+              <div className="sp-grid">
+                {filtered.map((med, i) => (
+                  <MedicineCard key={med.id} med={med} index={i} lang={lang} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       {/* ── Footer ── */}
