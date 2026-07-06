@@ -1,6 +1,6 @@
 # i18n Translation — Design Spec
 **Date:** 2026-07-06  
-**Status:** Approved  
+**Status:** Approved (v2 — post spec review)
 
 ## Overview
 
@@ -71,20 +71,34 @@ i18n
     supportedLngs: ['en', 'hi', 'mr'],
     detection: { order: ['localStorage', 'navigator'], caches: ['localStorage'] },
     interpolation: { escapeValue: false },
+    react: { useSuspense: false },
   })
 
 export default i18n
 ```
 
-- Language detection order: `localStorage` first (persists choice), then browser `navigator.language`
+- `react: { useSuspense: false }` prevents raw key flash on first render in React 18 StrictMode
+- Language detection: `localStorage` first (persists choice), then `navigator.language`
 - Fallback: `en`
 - All three locales are bundled — no lazy loading needed at this scale
+
+### `main.jsx` change
+
+Add `import './i18n'` as the **first import** in `src/main.jsx`, before `ReactDOM.createRoot`. This initialises i18next as a side effect before React renders. Without it, every `t('key')` call returns the raw key string.
+
+```js
+import './i18n'   // ← must be first
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+// ...
+```
 
 ---
 
 ## Language Switcher Component
 
-New `<LanguageSwitcher />` component placed in the header of `SearchPage`.
+New `<LanguageSwitcher />` component placed in the header of `SearchPage`. **Replaces and deletes** the existing `sp-lang-btn` toggle button entirely — both the JSX and the `.sp-lang-btn` CSS class.
 
 ```
 [ English ]  [ हिन्दी ]  [ मराठी ]
@@ -99,15 +113,57 @@ New `<LanguageSwitcher />` component placed in the header of `SearchPage`.
 
 ## SearchPage Migration
 
+The top-level `SearchPage` and all internal subcomponents must be migrated.
+
+### Top-level `SearchPage`
+
 | Before | After |
 |--------|-------|
 | `const [lang, setLang] = useState('hi')` | removed |
 | `const s = strings[lang]` | removed |
 | `s.searchPlaceholder` | `t('searchPlaceholder')` |
-| Manual `<button onClick={() => setLang(...)}>`  | `<LanguageSwitcher />` |
-| `import { strings }` | `import { useTranslation }` |
+| Manual `sp-lang-btn` toggle | `<LanguageSwitcher />` |
+| `import { strings }` | `import { useTranslation } from 'react-i18next'` |
 
-All `s.key` references replaced with `t('key')`. The `lang` and `setLang` state is removed entirely.
+### Subcomponents: `MedicineCard`, `EmptyState`, `StockBadge`
+
+All three consume `s = strings[lang]` via a `lang` prop. After migration:
+
+- Remove `lang` prop from all three components
+- Replace `const s = strings[lang]` with `const { t } = useTranslation()`
+- Replace all `s.key` references with `t('key')`
+- Remove `lang={lang}` from every `<MedicineCard ... />` call site
+
+The `lang` state and prop are removed entirely from the SearchPage component tree.
+
+---
+
+## Test Setup
+
+`src/__tests__/SearchPage.test.jsx` currently asserts on Hindi strings directly. After migration to i18next, jsdom's `navigator.language` defaults to `'en'`, so those assertions would fail.
+
+**Fix:** mock `react-i18next` in the test setup file so `t(key)` returns the key itself (language-agnostic):
+
+In `src/test-setup.js` (or `vitest.setup.js`), add:
+
+```js
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key) => key,
+    i18n: { changeLanguage: vi.fn(), language: 'en' },
+  }),
+  Trans: ({ children }) => children,
+}))
+```
+
+Then update all Hindi string assertions in `SearchPage.test.jsx` to use translation keys instead:
+
+```js
+// Before
+expect(screen.getByText('उपलब्ध नहीं')).toBeInTheDocument()
+// After
+expect(screen.getByText('outOfStock')).toBeInTheDocument()
+```
 
 ---
 
@@ -123,6 +179,8 @@ node scripts/generate-mr.js
 - For each value, calls Google Translate (`en` → `mr`)
 - Writes result to `src/i18n/locales/mr.json`
 - Committed to repo — never runs in production
+
+**Fallback:** If the free endpoint is unavailable, translate the 13 strings manually via translate.google.com and write `mr.json` by hand. The strings are short and a manual pass takes under 5 minutes.
 
 ---
 
@@ -148,9 +206,9 @@ No paid API keys required. Marathi generation uses the free Google Translate end
 
 ## Success Criteria
 
-1. All three language pills render in the header
+1. All three language pills render in the header; `sp-lang-btn` is gone
 2. Clicking any pill instantly updates all UI strings with no page reload
 3. Chosen language persists on refresh (localStorage)
-4. Browser language auto-detected on first visit
+4. Browser language auto-detected on first visit (`en` fallback)
 5. `strings.js` is deleted, no references remain
-6. All existing tests pass
+6. All existing tests pass with i18next mocked in test setup
