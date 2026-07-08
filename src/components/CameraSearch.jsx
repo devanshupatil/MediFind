@@ -117,6 +117,25 @@ function scoreMatch(medicineName, nameCandidates, allText) {
   return best
 }
 
+// Laplacian variance — higher = sharper. Runs on a small offscreen canvas (160x90).
+function computeSharpness({ data, width, height }) {
+  let sum = 0, count = 0
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = (y * width + x) * 4
+      const gray   = data[idx]*0.299   + data[idx+1]*0.587   + data[idx+2]*0.114
+      const top    = data[((y-1)*width+x)*4]*0.299 + data[((y-1)*width+x)*4+1]*0.587 + data[((y-1)*width+x)*4+2]*0.114
+      const bottom = data[((y+1)*width+x)*4]*0.299 + data[((y+1)*width+x)*4+1]*0.587 + data[((y+1)*width+x)*4+2]*0.114
+      const left   = data[(y*width+x-1)*4]*0.299   + data[(y*width+x-1)*4+1]*0.587   + data[(y*width+x-1)*4+2]*0.114
+      const right  = data[(y*width+x+1)*4]*0.299   + data[(y*width+x+1)*4+1]*0.587   + data[(y*width+x+1)*4+2]*0.114
+      const lap = 4*gray - top - bottom - left - right
+      sum += lap * lap
+      count++
+    }
+  }
+  return count > 0 ? sum / count : 0
+}
+
 async function fetchMedicines() {
   const { data, error } = await supabase
     .from('medicines')
@@ -389,3 +408,7 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     </>
   )
 }
+
+// Named exports for testing (preprocessImage will be defined in Task 2)
+const preprocessImage = undefined
+export { computeSharpness, preprocessImage }
