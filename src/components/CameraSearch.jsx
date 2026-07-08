@@ -255,7 +255,8 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
       canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.80))
+      preprocessImage(canvas)
+      resolve(canvas.toDataURL('image/jpeg', 0.88))
     }
     img.onerror = reject
     img.src = dataUrl
