@@ -416,7 +416,7 @@ function preprocessImage(canvas) {
   const src = ctx.getImageData(0, 0, w, h)
   const d = new Uint8ClampedArray(src.data)
 
-  // Pass 1: Contrast stretch (per-channel min/max)
+  // Pass 1: Contrast stretch — global min/max across all channels (preserves hue, boosts overall contrast)
   let min = 255, max = 0
   for (let i = 0; i < d.length; i += 4) {
     for (let c = 0; c < 3; c++) {
