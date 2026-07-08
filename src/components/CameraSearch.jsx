@@ -8,6 +8,10 @@ const isKeyReady = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here'
 
 const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
 
+const SHARP_THRESHOLD = 180  // auto-capture fires
+const READY_THRESHOLD = 100  // "Almost ready"
+const BLUR_THRESHOLD  = 40   // "Hold still..."
+
 const OCR_PROMPT = `You are a medicine label OCR expert. Analyse this medicine packaging image.
 Return ONLY a JSON object in this exact format (no markdown, no explanation):
 {
@@ -178,6 +182,14 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
   const onScanCompleteRef = useRef(onScanComplete)
   useEffect(() => { onScanCompleteRef.current = onScanComplete }, [onScanComplete])
 
+  const rafRef = useRef(null)
+  const lastSampleRef = useRef(0)
+  const debounceTimerRef = useRef(null)
+  const sharpnessRef = useRef(0)
+  const sharpLabelRef = useRef('blur')
+  const capturePhotoRef = useRef(null)
+  const [sharpLabel, setSharpLabel] = useState('blur')
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -187,9 +199,58 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
 
+  useEffect(() => {
+    if (state !== S.PREVIEW) {
+      setSharpLabel('blur')
+      sharpLabelRef.current = 'blur'
+      return
+    }
+    const offscreen = document.createElement('canvas')
+    offscreen.width = 160
+    offscreen.height = 90
+    const offCtx = offscreen.getContext('2d')
+
+    const loop = (ts) => {
+      rafRef.current = requestAnimationFrame(loop)
+      if (ts - lastSampleRef.current < 100) return
+      lastSampleRef.current = ts
+      const video = videoRef.current
+      if (!video || video.readyState < 2) return
+      offCtx.drawImage(video, 0, 0, 160, 90)
+      const score = computeSharpness(offCtx.getImageData(0, 0, 160, 90))
+      sharpnessRef.current = score
+      const next = score >= SHARP_THRESHOLD ? 'sharp' : score >= BLUR_THRESHOLD ? 'almost' : 'blur'
+      if (next !== sharpLabelRef.current) {
+        sharpLabelRef.current = next
+        setSharpLabel(next)
+      }
+      if (next === 'sharp') {
+        if (!debounceTimerRef.current) {
+          debounceTimerRef.current = setTimeout(() => {
+            debounceTimerRef.current = null
+            capturePhotoRef.current?.()
+          }, 400)
+        }
+      } else {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+    }
+    rafRef.current = requestAnimationFrame(loop)
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+  }, [state])
+
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
+    cancelAnimationFrame(rafRef.current)
+    rafRef.current = null
+    clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = null
   }, [])
 
   const startCamera = useCallback(async () => {
@@ -230,6 +291,8 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     stopCamera()
     processImage(dataUrl)
   }, [stopCamera])
+
+  useEffect(() => { capturePhotoRef.current = capturePhoto }, [capturePhoto])
 
   const onFileChange = useCallback(e => {
     const file = e.target.files?.[0]
