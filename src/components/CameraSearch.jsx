@@ -409,6 +409,51 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
   )
 }
 
-// Named exports for testing (preprocessImage will be defined in Task 2)
-const preprocessImage = undefined
+// Named exports for testing
+function preprocessImage(canvas) {
+  const ctx = canvas.getContext('2d')
+  const w = canvas.width, h = canvas.height
+  const src = ctx.getImageData(0, 0, w, h)
+  const d = new Uint8ClampedArray(src.data)
+
+  // Pass 1: Contrast stretch (per-channel min/max)
+  let min = 255, max = 0
+  for (let i = 0; i < d.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      if (d[i+c] < min) min = d[i+c]
+      if (d[i+c] > max) max = d[i+c]
+    }
+  }
+  if (max - min >= 10) {
+    const range = max - min
+    for (let i = 0; i < d.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        d[i+c] = Math.round((d[i+c] - min) / range * 255)
+      }
+    }
+  }
+
+  // Pass 2: Unsharp mask — 3x3 kernel [0,-1,0; -1,5,-1; 0,-1,0]
+  // Border pixels (row 0, row h-1, col 0, col w-1) are copied unchanged.
+  const sharpened = new Uint8ClampedArray(d)
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4
+      for (let c = 0; c < 3; c++) {
+        const val = 5 * d[i+c]
+          - d[((y-1)*w + x)*4 + c]
+          - d[((y+1)*w + x)*4 + c]
+          - d[(y*w + x-1)*4 + c]
+          - d[(y*w + x+1)*4 + c]
+        sharpened[i+c] = Math.min(255, Math.max(0, val))
+      }
+      sharpened[i+3] = d[i+3]
+    }
+  }
+
+  const outData = (typeof ImageData !== 'undefined')
+    ? new ImageData(sharpened, w, h)
+    : { data: sharpened, width: w, height: h }
+  ctx.putImageData(outData, 0, 0)
+}
 export { computeSharpness, preprocessImage }
