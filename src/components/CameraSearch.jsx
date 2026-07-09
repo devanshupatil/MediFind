@@ -414,7 +414,14 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
                     <span className="cs-scanline" />
                   </div>
                 </div>
-                <p className="cs-hint">Point at the medicine label and tap capture</p>
+                <div className="cs-sharp-indicator" aria-live="polite" aria-atomic="true">
+                  <span className={`cs-sharp-dot cs-sharp-dot--${sharpLabel}`} aria-hidden="true" />
+                  <span className="cs-sharp-label">
+                    {sharpLabel === 'blur'   && 'Hold still...'}
+                    {sharpLabel === 'almost' && 'Almost ready'}
+                    {sharpLabel === 'sharp'  && 'Ready ✓'}
+                  </span>
+                </div>
                 <div className="cs-toolbar">
                   <button className="cs-icon-btn" onClick={() => fileRef.current?.click()} aria-label="Upload image" type="button">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
