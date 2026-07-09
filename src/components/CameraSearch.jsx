@@ -12,16 +12,20 @@ const SHARP_THRESHOLD = 180  // auto-capture fires
 const READY_THRESHOLD = 100  // "Almost ready"
 const BLUR_THRESHOLD  = 40   // "Hold still..."
 
-const OCR_PROMPT = `You are a medicine label OCR expert. Analyse this medicine packaging image.
+const OCR_PROMPT = `You are a medicine identification expert. Examine this medicine packaging image and identify the medicine.
 Return ONLY a JSON object in this exact format (no markdown, no explanation):
 {
-  "name_candidates": ["list of likely brand/generic names and dosage strings — short phrases only, e.g. Crocin Advance, Paracetamol 500mg, Ibuprofen 400mg"],
-  "all_text": ["every other text fragment visible — manufacturer, instructions, batch, etc."]
+  "medicine_name": "brand or most prominent name on the pack",
+  "strength": "dosage strength e.g. 500mg, 10mg/5ml — empty string if not visible",
+  "form": "tablet, capsule, syrup, injection, cream, drops, or other — empty string if not visible",
+  "confidence": 0.0,
+  "all_names": ["every name, brand, generic, and dosage string visible — short phrases only"]
 }
 Rules:
-- name_candidates: ONLY short (≤5 words) brand/generic/dosage fragments. These are the most prominent, largest text on the pack.
-- all_text: everything else readable on the label.
-- Return raw JSON only.`
+- medicine_name: the single most prominent name on the packaging.
+- confidence: your confidence that medicine_name is correct (0.0 to 1.0).
+- all_names: include brand name, generic name, dosage strings (e.g. "Paracetamol 500mg"). Max 8 items.
+- Return raw JSON only. No markdown fences.\``
 
 async function extractTextFromImage(base64Data, mimeType = 'image/jpeg') {
   if (!isKeyReady) throw new Error('NO_API_KEY')
@@ -30,7 +34,7 @@ async function extractTextFromImage(base64Data, mimeType = 'image/jpeg') {
 
   const response = await client.chat.completions.create({
     model: VISION_MODEL,
-    max_tokens: 600,
+    max_tokens: 1024,
     messages: [{
       role: 'user',
       content: [
@@ -43,25 +47,14 @@ async function extractTextFromImage(base64Data, mimeType = 'image/jpeg') {
   const raw = response.choices[0]?.message?.content?.trim() ?? ''
   const stripped = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
   const jsonMatch = stripped.match(/\{[\s\S]*\}/)
-  const clean = jsonMatch ? jsonMatch[0] : stripped
-
-  const isValidToken = (s) => {
-    const t = s.trim()
-    if (!t || t.length < 2 || t.length > 80) return false
-    if (/^[{\[\]}",\\]/.test(t)) return false
-    if (/^(name_candidates|all_text|:\s*\[)/.test(t)) return false
-    return true
-  }
-
-  try {
-    const parsed = JSON.parse(clean)
-    return {
-      nameCandidates: (Array.isArray(parsed.name_candidates) ? parsed.name_candidates : []).filter(isValidToken),
-      allText: (Array.isArray(parsed.all_text) ? parsed.all_text : []).filter(isValidToken),
-    }
-  } catch {
-    const quoted = [...stripped.matchAll(/"([^"]{2,60})"/g)].map(m => m[1]).filter(isValidToken)
-    return { nameCandidates: quoted.slice(0, 8), allText: [] }
+  if (!jsonMatch) throw new Error('No JSON in AI response')
+  const parsed = JSON.parse(jsonMatch[0])
+  return {
+    medicine_name: parsed.medicine_name ?? '',
+    strength:      parsed.strength ?? '',
+    form:          parsed.form ?? '',
+    confidence:    typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    all_names:     Array.isArray(parsed.all_names) ? parsed.all_names.filter(s => typeof s === 'string' && s.trim()) : [],
   }
 }
 
