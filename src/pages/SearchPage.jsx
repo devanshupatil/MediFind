@@ -379,9 +379,9 @@ export function SearchPage() {
               </button>
 
               <div className="sp-scan-wrap">
-                <CameraSearch onScanComplete={(src, matches) => {
+                <CameraSearch onScanComplete={(src, matches, info) => {
                   setScanData({ imageSrc: src, matches })
-                  setQuery('')
+                  setQuery(info?.medicine_name || '')
                 }} />
               </div>
             </div>
