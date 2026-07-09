@@ -13,6 +13,8 @@ const READY_THRESHOLD = 100  // "Almost ready"
 const BLUR_THRESHOLD  = 40   // "Hold still..."
 
 const OCR_PROMPT = `You are a medicine identification expert. Examine this medicine packaging image and identify the medicine.
+Note: The image might be rotated or upside down. Please read the text carefully in any orientation. Find the actual medicine/generic name (e.g., "Vitamin B-Complex Tablets" or brand name). Do not confuse the manufacturer/pharmaceutical company name (like "Healthy Life Pharma") with the medicine's name.
+
 Return ONLY a JSON object in this exact format (no markdown, no explanation):
 {
   "medicine_name": "brand or most prominent name on the pack",
