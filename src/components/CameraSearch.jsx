@@ -177,10 +177,8 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
 
   const rafRef = useRef(null)
   const lastSampleRef = useRef(0)
-  const debounceTimerRef = useRef(null)
   const sharpnessRef = useRef(0)
   const sharpLabelRef = useRef('blur')
-  const capturePhotoRef = useRef(null)
   const [sharpLabel, setSharpLabel] = useState('blur')
 
   useEffect(() => {
@@ -217,23 +215,10 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
         sharpLabelRef.current = next
         setSharpLabel(next)
       }
-      if (next === 'sharp') {
-        if (!debounceTimerRef.current) {
-          debounceTimerRef.current = setTimeout(() => {
-            debounceTimerRef.current = null
-            capturePhotoRef.current?.()
-          }, 400)
-        }
-      } else {
-        clearTimeout(debounceTimerRef.current)
-        debounceTimerRef.current = null
-      }
     }
     rafRef.current = requestAnimationFrame(loop)
     return () => {
       cancelAnimationFrame(rafRef.current)
-      clearTimeout(debounceTimerRef.current)
-      debounceTimerRef.current = null
     }
   }, [state])
 
@@ -242,8 +227,6 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     streamRef.current = null
     cancelAnimationFrame(rafRef.current)
     rafRef.current = null
-    clearTimeout(debounceTimerRef.current)
-    debounceTimerRef.current = null
   }, [])
 
   const startCamera = useCallback(async () => {
@@ -283,8 +266,6 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     stopCamera()
     processImage(dataUrl)
   }, [stopCamera])
-
-  useEffect(() => { capturePhotoRef.current = capturePhoto }, [capturePhoto])
 
   const onFileChange = useCallback(e => {
     const file = e.target.files?.[0]
