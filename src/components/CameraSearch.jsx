@@ -150,7 +150,7 @@ function findMatchingMedicines({ nameCandidates, allText }, medicines, limit = 5
     .slice(0, limit)
 }
 
-const S = { IDLE: 'idle', PREVIEW: 'preview', ANALYZING: 'analyzing', MATCHING: 'matching', DONE: 'done', ERROR: 'error' }
+const S = { IDLE: 'idle', PREVIEW: 'preview', ANALYZING: 'analyzing', MATCHING: 'matching', WARN: 'warn', DONE: 'done', ERROR: 'error' }
 
 function IconCameraSVG() {
   return (
@@ -165,8 +165,8 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
   const [state, setState] = useState(S.IDLE)
   const [isOpen, setIsOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState(null)
-  const [ocrData, setOcrData] = useState({ nameCandidates: [], allText: [] })
   const [error, setError] = useState('')
+  const [warnMsg, setWarnMsg] = useState('')
 
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -250,7 +250,6 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     setIsOpen(true)
     setState(S.PREVIEW)
     setImageSrc(null)
-    setOcrData({ nameCandidates: [], allText: [] })
     setError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -269,8 +268,8 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     setIsOpen(false)
     setState(S.IDLE)
     setImageSrc(null)
-    setOcrData({ nameCandidates: [], allText: [] })
     setError('')
+    setWarnMsg('')
   }, [stopCamera])
 
   const capturePhoto = useCallback(() => {
@@ -321,7 +320,6 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
   const processImage = useCallback(async (dataUrl) => {
     setImageSrc(dataUrl)
     setState(S.ANALYZING)
-    setOcrData({ nameCandidates: [], allText: [] })
     setError('')
 
     if (!isKeyReady) {
@@ -334,22 +332,34 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
       const jpegUrl = await toJpeg(dataUrl)
       const base64 = jpegUrl.split(',')[1]
 
-      // Fire OCR and medicine fetch in parallel
       const [extracted, medicines] = await Promise.all([
         extractTextFromImage(base64, 'image/jpeg'),
         fetchMedicines(),
       ])
-      setOcrData(extracted)
 
-      if (extracted.nameCandidates.length === 0 && extracted.allText.length === 0) {
-        setError('No label text found. Point the camera at the medicine name on the box or strip — not the pill side.')
+      if (!extracted.all_names.length || extracted.confidence < 0.2) {
+        setError("Couldn't identify this medicine — try better lighting or move closer.")
         setState(S.ERROR)
         return
       }
 
       setState(S.MATCHING)
-      const topMatches = findMatchingMedicines(extracted, medicines)
-      onScanCompleteRef.current(jpegUrl, topMatches)
+      const topMatches = findMatchingMedicines(
+        { nameCandidates: extracted.all_names, allText: [] },
+        medicines
+      )
+
+      if (extracted.confidence < 0.5) {
+        setState(S.WARN)
+        setWarnMsg('Low confidence — please verify this result manually.')
+        await new Promise(r => setTimeout(r, 1800))
+      }
+
+      onScanCompleteRef.current(jpegUrl, topMatches, {
+        medicine_name: extracted.medicine_name,
+        strength: extracted.strength,
+        form: extracted.form,
+      })
       close()
     } catch (err) {
       setError(err.message.includes('NO_API_KEY')
@@ -359,7 +369,7 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
     }
   }, [close, toJpeg])
 
-  const isProcessing = state === S.ANALYZING || state === S.MATCHING
+  const isProcessing = state === S.ANALYZING || state === S.MATCHING || state === S.WARN
 
   return (
     <>
@@ -448,6 +458,21 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
               </div>
             )}
 
+
+            {/* ── Confidence warning ── */}
+            {state === S.WARN && (
+              <div className="cs-analyzing">
+                {imageSrc && <img src={imageSrc} alt="Captured medicine" className="cs-thumb" />}
+                <div className="cs-confidence-warning" role="alert">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.4 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  {warnMsg}
+                </div>
+              </div>
+            )}
 
             {/* ── Error ── */}
             {state === S.ERROR && (
