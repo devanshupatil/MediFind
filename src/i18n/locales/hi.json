@@ -21,6 +21,7 @@
   "scanNoMatchHint": "लेबल पढ़ा गया लेकिन इन्वेंटरी में कोई दवाई नहीं मिली",
   "scanClear": "स्कैन हटाएं",
   "footerTagline": "AI-संचालित · रियल-टाइम इन्वेंटरी",
+  "adminLink": "एडमिन पोर्टल",
   "ariaSearchResults": "दवाई खोज परिणाम",
   "ariaLoadingMedicines": "दवाइयां लोड हो रही हैं",
   "ariaCallStore": "दुकान पर Call करें",

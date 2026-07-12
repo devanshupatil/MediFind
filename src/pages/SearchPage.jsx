@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { CameraSearch } from '../components/CameraSearch'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { useTranslatedName, translationCache } from '../hooks/useTranslatedName'
+import { trackSearch } from '../lib/analytics'
 
 const PHONE = import.meta.env.VITE_SHOP_PHONE
 
@@ -217,6 +219,18 @@ export function SearchPage() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  // ── Debounced search tracking ── fire after 800 ms of inactivity
+  const searchDebounceRef = useRef(null)
+  useEffect(() => {
+    if (!query.trim()) return
+    clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      trackSearch(query, filtered.length)
+    }, 800)
+    return () => clearTimeout(searchDebounceRef.current)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   const lang = i18n.language?.split('-')[0] ?? 'en'
   const filtered = medicines.filter(m => {
@@ -465,6 +479,9 @@ export function SearchPage() {
             MediFind
           </span>
           <span className="sp-footer-tagline">{t('footerTagline')}</span>
+          <Link to="/admin" className="sp-footer-admin-link">
+            {t('adminLink')}
+          </Link>
         </div>
       </footer>
 

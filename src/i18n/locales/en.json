@@ -21,6 +21,7 @@
   "scanNoMatchHint": "Label was read but no medicines in inventory matched",
   "scanClear": "Clear scan",
   "footerTagline": "AI-powered · Real-time inventory",
+  "adminLink": "Admin Portal",
   "ariaSearchResults": "Medicine search results",
   "ariaLoadingMedicines": "Loading medicines",
   "ariaCallStore": "Call store",

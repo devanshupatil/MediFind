@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import Groq from 'groq-sdk'
 import { supabase } from '../lib/supabase'
+import { trackScan } from '../lib/analytics'
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
 const isKeyReady = GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here'
@@ -337,6 +338,9 @@ export function CameraSearch({ onScanComplete, iconOnly = false }) {
         setWarnMsg('Low confidence — please verify this result manually.')
         await new Promise(r => setTimeout(r, 1800))
       }
+
+      // Track the scan in GA4 + Supabase
+      trackScan(extracted.medicine_name, extracted.confidence, topMatches.length > 0)
 
       onScanCompleteRef.current(jpegUrl, topMatches, {
         medicine_name: extracted.medicine_name,

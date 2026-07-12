@@ -1,9 +1,177 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { StatsRow } from '../components/StatsRow'
 import { MedicineForm } from '../components/MedicineForm'
+import { BulkEditTable } from '../components/BulkEditTable'
+
+// ── Analytics Chart Component ──────────────────────────────
+
+function BarChart({ items, colorClass }) {
+  if (!items.length) {
+    return (
+      <div className="ga-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+          <path d="M3 3v18h18" /><path d="M18 9l-5 5-4-4-3 3" />
+        </svg>
+        <span>No data yet — events will appear here once users start searching or scanning.</span>
+      </div>
+    )
+  }
+  const max = items[0]?.count || 1
+  return (
+    <ol className="ga-bar-list">
+      {items.map((item, i) => (
+        <li key={i} className="ga-bar-item">
+          <span className="ga-bar-label" title={item.name}>{item.name}</span>
+          <div className="ga-bar-track">
+            <motion.div
+              className={`ga-bar-fill ${colorClass}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${(item.count / max) * 100}%` }}
+              transition={{ delay: i * 0.04, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
+          <span className="ga-bar-count">{item.count}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function AnalyticsSection() {
+  const [range,        setRange]        = useState('7d')
+  const [searchData,   setSearchData]   = useState([])
+  const [scanData,     setScanData]     = useState([])
+  const [loading,      setLoading]      = useState(true)
+
+  const load = useCallback(async (r) => {
+    setLoading(true)
+    const since = r === '7d'
+      ? new Date(Date.now() - 7  * 86400000).toISOString()
+      : r === '30d'
+      ? new Date(Date.now() - 30 * 86400000).toISOString()
+      : null
+
+    const [{ data: sData }, { data: cData }] = await Promise.all([
+      since
+        ? supabase.from('search_logs').select('query').gte('created_at', since)
+        : supabase.from('search_logs').select('query'),
+      since
+        ? supabase.from('scan_logs').select('medicine_name').gte('created_at', since)
+        : supabase.from('scan_logs').select('medicine_name'),
+    ])
+
+    // Aggregate client-side (avoids needing a DB function)
+    const agg = (rows, key) => {
+      const map = {}
+      for (const row of rows ?? []) {
+        const k = (row[key] ?? '').trim().toLowerCase()
+        if (!k) continue
+        map[k] = (map[k] || 0) + 1
+      }
+      return Object.entries(map)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+    }
+
+    setSearchData(agg(sData, 'query'))
+    setScanData(agg(cData, 'medicine_name'))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load(range) }, [range, load])
+
+  const RANGES = [{ v: '7d', l: '7 days' }, { v: '30d', l: '30 days' }, { v: 'all', l: 'All time' }]
+
+  return (
+    <section className="ga-section" aria-labelledby="ga-title">
+      <div className="ga-header">
+        <div className="ga-header-left">
+          <div className="ga-icon-wrap" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 3v18h18" /><path d="M18 9l-5 5-4-4-3 3" />
+            </svg>
+          </div>
+          <div>
+            <h2 id="ga-title" className="ga-title">Analytics</h2>
+            <p className="ga-subtitle">Most searched &amp; scanned medicines</p>
+          </div>
+        </div>
+        <div className="ga-header-right">
+          <div className="ga-range-tabs" role="group" aria-label="Time range">
+            {RANGES.map(({ v, l }) => (
+              <button
+                key={v}
+                type="button"
+                className={`ga-range-tab${range === v ? ' ga-range-tab--active' : ''}`}
+                onClick={() => setRange(v)}
+                aria-pressed={range === v}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+          <a
+            href="https://analytics.google.com/analytics/web/#/p$(G-018C52JKTJ)/reports/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ga-ga4-link"
+            aria-label="Open Google Analytics dashboard"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+            View in GA4
+          </a>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="ga-charts-grid ga-loading">
+          {[0, 1].map(i => (
+            <div key={i} className="ga-card">
+              <div className="ga-card-header"><div className="ga-skel ga-skel--title" /></div>
+              {Array.from({ length: 5 }).map((_, j) => (
+                <div key={j} className="ga-skel-row">
+                  <div className="ga-skel ga-skel--label" />
+                  <div className="ga-skel ga-skel--bar" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="ga-charts-grid">
+          {/* Top Searches */}
+          <div className="ga-card">
+            <div className="ga-card-header">
+              <span className="ga-card-dot ga-card-dot--search" aria-hidden="true" />
+              <h3 className="ga-card-title">Top Searches</h3>
+              <span className="ga-card-count">{searchData.length} terms</span>
+            </div>
+            <BarChart items={searchData} colorClass="ga-bar-fill--search" />
+          </div>
+
+          {/* Top Scans */}
+          <div className="ga-card">
+            <div className="ga-card-header">
+              <span className="ga-card-dot ga-card-dot--scan" aria-hidden="true" />
+              <h3 className="ga-card-title">Top Scanned Medicines</h3>
+              <span className="ga-card-count">{scanData.length} medicines</span>
+            </div>
+            <BarChart items={scanData} colorClass="ga-bar-fill--scan" />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 
 // ── Icons ─────────────────────────────────────────────────────
 
@@ -125,6 +293,7 @@ export function AdminDashboardPage() {
   const [editTarget,   setEditTarget]   = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [toast,        setToast]        = useState('')
+  const [bulkMode,     setBulkMode]     = useState(false)
 
   const displayEmail = session?.user?.email ?? 'Admin'
 
@@ -172,6 +341,30 @@ export function AdminDashboardPage() {
     showToast('Medicine deleted')
   }
 
+  // ── Bulk Save ───────────────────────────────────────────
+
+  const handleBulkSave = async ({ inserts, updates, deletes }) => {
+    const ops = []
+
+    if (inserts.length > 0)
+      ops.push(supabase.from('medicines').insert(inserts))
+
+    for (const u of updates)
+      ops.push(supabase.from('medicines').update({ name: u.name, price: u.price, quantity: u.quantity }).eq('id', u.id))
+
+    for (const id of deletes)
+      ops.push(supabase.from('medicines').delete().eq('id', id))
+
+    await Promise.all(ops)
+    await loadMedicines()
+    setBulkMode(false)
+    const parts = []
+    if (inserts.length) parts.push(`${inserts.length} added`)
+    if (updates.length) parts.push(`${updates.length} updated`)
+    if (deletes.length) parts.push(`${deletes.length} deleted`)
+    showToast(parts.length ? `Saved — ${parts.join(', ')}` : 'No changes')
+  }
+
   // ── Filter ──────────────────────────────────────────────────
 
   const filtered = medicines.filter(m =>
@@ -212,25 +405,47 @@ export function AdminDashboardPage() {
       {/* ── Main ── */}
       <main className="adm-main">
 
-        {/* Page title + Add button */}
+        {/* Page title + action buttons */}
         <div className="adm-page-head">
           <div>
             <h1 className="adm-page-title">Inventory</h1>
             <p className="adm-page-sub">Manage your medicine stock and pricing</p>
           </div>
-          <button
-            type="button"
-            className="adm-btn adm-btn-primary"
-            onClick={() => setShowForm(true)}
-            aria-label="Add Medicine"
-          >
-            <IconPlus />
-            Add Medicine
-          </button>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {!bulkMode && (
+              <>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-bulk"
+                  onClick={() => setBulkMode(true)}
+                  aria-label="Bulk Edit"
+                  title="Edit multiple items at once"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+                  </svg>
+                  Bulk Edit
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-primary"
+                  onClick={() => setShowForm(true)}
+                  aria-label="Add Medicine"
+                >
+                  <IconPlus />
+                  Add Medicine
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Stats row */}
         <StatsRow medicines={medicines} />
+
+        {/* Analytics section */}
+        <AnalyticsSection />
 
         {/* Search bar */}
         <div className="adm-toolbar">
@@ -250,78 +465,96 @@ export function AdminDashboardPage() {
           </span>
         </div>
 
-        {/* Table */}
-        <div className="adm-table-wrap">
-          {loading ? (
-            <div className="adm-table-loading" aria-label="Loading medicines">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="adm-skel-row">
-                  <div className="adm-skel-cell adm-skel-cell--name" />
-                  <div className="adm-skel-cell adm-skel-cell--sm" />
-                  <div className="adm-skel-cell adm-skel-cell--sm" />
-                  <div className="adm-skel-cell adm-skel-cell--badge" />
-                  <div className="adm-skel-cell adm-skel-cell--actions" />
-                </div>
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="adm-empty">
-              <p className="adm-empty-msg">
-                {query ? `No medicines match "${query}"` : 'No medicines yet. Add one above.'}
-              </p>
-            </div>
+        {/* Table / Bulk editor */}
+        <AnimatePresence mode="wait">
+          {bulkMode ? (
+            <BulkEditTable
+              key="bulk"
+              medicines={medicines}
+              onSave={handleBulkSave}
+              onCancel={() => setBulkMode(false)}
+            />
           ) : (
-            <table className="adm-table" aria-label="Medicine inventory">
-              <thead>
-                <tr>
-                  <th className="adm-th">Medicine</th>
-                  <th className="adm-th adm-th--right">Price (₹)</th>
-                  <th className="adm-th adm-th--right">Qty</th>
-                  <th className="adm-th">Status</th>
-                  <th className="adm-th adm-th--right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((med, i) => (
-                  <motion.tr
-                    key={med.id}
-                    className="adm-tr"
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.3 }}
-                  >
-                    <td className="adm-td adm-td--name">{med.name}</td>
-                    <td className="adm-td adm-td--right adm-td--price">₹{med.price ?? '—'}</td>
-                    <td className="adm-td adm-td--right">{med.quantity ?? 0}</td>
-                    <td className="adm-td"><StockBadge quantity={med.quantity} /></td>
-                    <td className="adm-td adm-td--right">
-                      <div className="adm-actions">
-                        <button
-                          type="button"
-                          className="adm-action-btn adm-action-btn--edit"
-                          onClick={() => setEditTarget(med)}
-                          aria-label={`Edit ${med.name}`}
-                        >
-                          <IconEdit />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="adm-action-btn adm-action-btn--delete"
-                          onClick={() => setDeleteTarget(med)}
-                          aria-label={`Delete ${med.name}`}
-                        >
-                          <IconTrash />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
+            <motion.div
+              key="table"
+              className="adm-table-wrap"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              {loading ? (
+                <div className="adm-table-loading" aria-label="Loading medicines">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="adm-skel-row">
+                      <div className="adm-skel-cell adm-skel-cell--name" />
+                      <div className="adm-skel-cell adm-skel-cell--sm" />
+                      <div className="adm-skel-cell adm-skel-cell--sm" />
+                      <div className="adm-skel-cell adm-skel-cell--badge" />
+                      <div className="adm-skel-cell adm-skel-cell--actions" />
+                    </div>
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="adm-empty">
+                  <p className="adm-empty-msg">
+                    {query ? `No medicines match "${query}"` : 'No medicines yet. Add one above.'}
+                  </p>
+                </div>
+              ) : (
+                <table className="adm-table" aria-label="Medicine inventory">
+                  <thead>
+                    <tr>
+                      <th className="adm-th">Medicine</th>
+                      <th className="adm-th adm-th--right">Price (₹)</th>
+                      <th className="adm-th adm-th--right">Qty</th>
+                      <th className="adm-th">Status</th>
+                      <th className="adm-th adm-th--right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((med, i) => (
+                      <motion.tr
+                        key={med.id}
+                        className="adm-tr"
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.3 }}
+                      >
+                        <td className="adm-td adm-td--name">{med.name}</td>
+                        <td className="adm-td adm-td--right adm-td--price">₹{med.price ?? '—'}</td>
+                        <td className="adm-td adm-td--right">{med.quantity ?? 0}</td>
+                        <td className="adm-td"><StockBadge quantity={med.quantity} /></td>
+                        <td className="adm-td adm-td--right">
+                          <div className="adm-actions">
+                            <button
+                              type="button"
+                              className="adm-action-btn adm-action-btn--edit"
+                              onClick={() => setEditTarget(med)}
+                              aria-label={`Edit ${med.name}`}
+                            >
+                              <IconEdit />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="adm-action-btn adm-action-btn--delete"
+                              onClick={() => setDeleteTarget(med)}
+                              aria-label={`Delete ${med.name}`}
+                            >
+                              <IconTrash />
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       </main>
 
       {/* ── Modals ── */}
