@@ -8,6 +8,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<SearchPage />} />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route
         path="/admin/dashboard"
