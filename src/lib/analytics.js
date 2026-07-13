@@ -19,6 +19,11 @@ function gtag(...args) {
   }
 }
 
+// ── Debug mode ─────────────────────────────────────────────
+// Enable with ?ga_debug=1 in URL to log events to console
+const isDebugMode = typeof window !== 'undefined' 
+  && new URLSearchParams(window.location.search).get('ga_debug') === '1'
+
 // ── trackSearch ────────────────────────────────────────────
 /**
  * Call this when a user performs a medicine search.
@@ -34,6 +39,7 @@ export async function trackSearch(query, resultCount) {
     search_term:  q,
     result_count: resultCount,
   })
+  if (isDebugMode) console.log('[GA4] medicine_search:', { search_term: q, result_count: resultCount })
 
   // 2. Log to Supabase (fire-and-forget — errors are intentionally swallowed)
   try {
@@ -63,6 +69,7 @@ export async function trackScan(medicineName, confidence, matched) {
     confidence:    Math.round((confidence ?? 0) * 100),
     matched:       Boolean(matched),
   })
+  if (isDebugMode) console.log('[GA4] medicine_scan:', { medicine_name: name, confidence: Math.round((confidence ?? 0) * 100), matched: Boolean(matched) })
 
   // 2. Log to Supabase
   try {
