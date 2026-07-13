@@ -11,7 +11,21 @@
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-018C52JKTJ');
+      gtag('config', 'G-018C52JKTJ', {
+        debug_mode: new URLSearchParams(window.location.search).get('ga_debug') === '1'
+      });
+
+      // Debug diagnostics — only runs with ?ga_debug=1
+      if (new URLSearchParams(window.location.search).get('ga_debug') === '1') {
+        setTimeout(function() {
+          console.log('[GA4 Debug] gtag loaded:', typeof window.gtag === 'function');
+          console.log('[GA4 Debug] dataLayer:', window.dataLayer);
+          console.log('[GA4 Debug] dataLayer length:', window.dataLayer.length);
+          if (window.dataLayer.length === 0) {
+            console.warn('[GA4 Debug] dataLayer is EMPTY — gtag script may be blocked');
+          }
+        }, 2000);
+      }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
