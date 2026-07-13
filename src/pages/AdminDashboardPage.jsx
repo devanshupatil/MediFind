@@ -115,7 +115,7 @@ function AnalyticsSection() {
             ))}
           </div>
           <a
-            href="https://analytics.google.com/analytics/web/#/p$(G-018C52JKTJ)/reports/"
+            href="https://analytics.google.com/analytics/web/"
             target="_blank"
             rel="noopener noreferrer"
             className="ga-ga4-link"
