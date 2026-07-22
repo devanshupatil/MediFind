@@ -7,8 +7,30 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
+vi.mock('react-router-dom', () => ({
+  Link: ({ children, to, ...props }) => <a href={to} {...props}>{children}</a>,
+}))
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key) => {
+      const dict = {
+        inStock: 'In Stock',
+        outOfStock: 'Out of Stock',
+        noResults: 'No medicines found',
+        searchPlaceholder: 'Search medicine name...',
+      }
+      return dict[key] || key
+    },
+    i18n: { language: 'en', changeLanguage: vi.fn() }
+  })
+}))
+
 import { supabase } from '../lib/supabase'
 import { SearchPage } from '../pages/SearchPage'
+
+
+
 
 const mockMedicines = [
   { id: '1', name: 'Paracetamol', price: 12, quantity: 50 },
@@ -49,4 +71,6 @@ describe('SearchPage', () => {
     await screen.findAllByRole('listitem')
     expect(screen.getByText(/In Stock/i)).toBeInTheDocument()
   })
+
+
 })
