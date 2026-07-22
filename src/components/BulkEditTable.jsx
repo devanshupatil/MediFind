@@ -65,7 +65,6 @@ function toDraftRows(medicines) {
     _dirty:       false,
     id:           m.id,
     name:         m.name         ?? '',
-    price:        String(m.price    ?? ''),
     quantity:     String(m.quantity ?? ''),
     expiry_date:  m.expiry_date  ?? '',
     company_name: m.company_name ?? '',
@@ -77,7 +76,6 @@ function toDraftRows(medicines) {
 function validateRow(row) {
   const errs = {}
   if (!row.name.trim())                                           errs.name         = 'Required'
-  if (row.price === '' || Number(row.price) < 0)                  errs.price        = 'Invalid'
   if (row.quantity === '' || Number(row.quantity) < 0)            errs.quantity     = 'Invalid'
   if (row.mrp_per_strip !== '' && Number(row.mrp_per_strip) < 0)  errs.mrp_per_strip = 'Invalid'
   return errs
@@ -130,7 +128,6 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
       _dirty:       true,
       id:           null,
       name:         '',
-      price:        '',
       quantity:     '',
       expiry_date:  '',
       company_name: '',
@@ -158,7 +155,7 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
 
   const handleKeyDown = (e, rowKey, field) => {
     if (e.key !== 'Tab') return
-    const COLS = ['name', 'company_name', 'composition', 'price', 'mrp_per_strip', 'quantity', 'expiry_date']
+    const COLS = ['name', 'company_name', 'composition', 'mrp_per_strip', 'quantity', 'expiry_date']
     const colIdx = COLS.indexOf(field)
     const visibleRows = rows.filter(r => r._status !== 'deleted')
     const rowIdx = visibleRows.findIndex(r => r._rowKey === rowKey)
@@ -204,7 +201,6 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
     setSaving(true)
     const toPayload = r => ({
       name:          r.name.trim(),
-      price:         Number(r.price),
       quantity:      Number(r.quantity),
       expiry_date:   r.expiry_date  || null,
       company_name:  r.company_name.trim() || null,
@@ -297,7 +293,6 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
               <th className="bke-th bke-th--name">Medicine Name</th>
               <th className="bke-th bke-th--company">Company</th>
               <th className="bke-th bke-th--composition">Composition</th>
-              <th className="bke-th bke-th--price">Price (₹)</th>
               <th className="bke-th bke-th--mrp">MRP/Strip (₹)</th>
               <th className="bke-th bke-th--qty">Qty</th>
               <th className="bke-th bke-th--expiry">Expiry</th>
@@ -374,28 +369,6 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
                         placeholder="Contains…"
                         aria-label={`Composition for row ${idx + 1}`}
                       />
-                    </div>
-                  </td>
-
-                  {/* Price */}
-                  <td className="bke-td bke-td--price">
-                    <div className={`bke-cell-wrap bke-cell-wrap--num${rowErrs.price ? ' bke-cell-wrap--err' : ''}`}>
-                      <span className="bke-prefix">₹</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="bke-cell-input bke-cell-input--num"
-                        value={row.price}
-                        data-rowkey={row._rowKey}
-                        data-field="price"
-                        onChange={e => updateCell(row._rowKey, 'price', e.target.value)}
-                        onKeyDown={e => handleKeyDown(e, row._rowKey, 'price')}
-                        placeholder="0"
-                        aria-label={`Price for row ${idx + 1}`}
-                        aria-invalid={Boolean(rowErrs.price)}
-                      />
-                      {rowErrs.price && <span className="bke-cell-err">{rowErrs.price}</span>}
                     </div>
                   </td>
 
@@ -490,7 +463,6 @@ export function BulkEditTable({ medicines, onSave, onCancel }) {
                 <td className="bke-td bke-td--name bke-td--strike">{row.name || '—'}</td>
                 <td className="bke-td bke-td--company bke-td--strike">{row.company_name || '—'}</td>
                 <td className="bke-td bke-td--composition bke-td--strike">{row.composition || '—'}</td>
-                <td className="bke-td bke-td--price bke-td--strike">₹{row.price || '—'}</td>
                 <td className="bke-td bke-td--mrp bke-td--strike">₹{row.mrp_per_strip || '—'}</td>
                 <td className="bke-td bke-td--qty bke-td--strike">{row.quantity || '—'}</td>
                 <td className="bke-td bke-td--expiry bke-td--strike">{row.expiry_date || '—'}</td>
