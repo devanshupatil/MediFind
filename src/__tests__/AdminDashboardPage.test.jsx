@@ -21,16 +21,20 @@ const mockMedicines = [
 ]
 
 function mockSupabase(data = mockMedicines) {
-  const chain = {
-    select: vi.fn().mockResolvedValue({ data, error: null }),
-    insert: vi.fn().mockReturnValue({ select: vi.fn().mockResolvedValue({ data: [{ id: '3', ...data[0] }], error: null }) }),
-    update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
-    delete: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
-    eq: vi.fn().mockResolvedValue({ error: null }),
-  }
+  const chain = {}
+  chain.select = vi.fn().mockReturnValue(chain)
+  chain.insert = vi.fn().mockReturnValue(chain)
+  chain.update = vi.fn().mockReturnValue(chain)
+  chain.delete = vi.fn().mockReturnValue(chain)
+  chain.eq = vi.fn().mockReturnValue(chain)
+  chain.gte = vi.fn().mockReturnValue(chain)
+  chain.then = vi.fn().mockImplementation((resolve) => {
+    resolve({ data, error: null })
+  })
   supabase.from.mockReturnValue(chain)
   return chain
 }
+
 
 describe('AdminDashboardPage', () => {
   beforeEach(() => {
@@ -56,7 +60,7 @@ describe('AdminDashboardPage', () => {
     render(<MemoryRouter><AdminDashboardPage /></MemoryRouter>)
     await screen.findByText('Paracetamol')
     fireEvent.click(screen.getByRole('button', { name: /add medicine/i }))
-    expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^name$/i)).toBeInTheDocument()
   })
 
   it('shows delete confirmation when Delete is clicked', async () => {
