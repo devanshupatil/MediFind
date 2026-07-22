@@ -11,16 +11,23 @@ import { motion, AnimatePresence } from 'framer-motion'
 export function MedicineForm({ medicine, onSubmit, onCancel }) {
   const isEdit = Boolean(medicine)
 
-  const [name,     setName]     = useState(medicine?.name     ?? '')
-  const [price,    setPrice]    = useState(medicine?.price    ?? '')
-  const [quantity, setQuantity] = useState(medicine?.quantity ?? '')
-  const [errors,   setErrors]   = useState({})
+  const [name,          setName]          = useState(medicine?.name          ?? '')
+  const [price,         setPrice]         = useState(medicine?.price         ?? '')
+  const [quantity,      setQuantity]      = useState(medicine?.quantity      ?? '')
+  const [expiryDate,    setExpiryDate]    = useState(medicine?.expiry_date   ?? '')
+  const [companyName,   setCompanyName]   = useState(medicine?.company_name  ?? '')
+  const [composition,   setComposition]   = useState(medicine?.composition   ?? '')
+  const [mrpPerStrip,   setMrpPerStrip]   = useState(medicine?.mrp_per_strip ?? '')
+  const [errors,        setErrors]        = useState({})
 
   const validate = () => {
     const e = {}
     if (!name.trim())              e.name     = 'Name is required'
     if (price === '' || price < 0) e.price    = 'Enter a valid price'
     if (quantity === '' || quantity < 0) e.quantity = 'Enter a valid quantity'
+    if (mrpPerStrip !== '' && Number(mrpPerStrip) < 0) {
+      e.mrp_per_strip = 'MRP must be positive'
+    }
     return e
   }
 
@@ -28,7 +35,15 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
     e.preventDefault()
     const e2 = validate()
     if (Object.keys(e2).length) { setErrors(e2); return }
-    onSubmit({ name: name.trim(), price: Number(price), quantity: Number(quantity) })
+    onSubmit({
+      name: name.trim(),
+      price: Number(price),
+      quantity: Number(quantity),
+      expiry_date: expiryDate,
+      company_name: companyName.trim(),
+      composition: composition.trim(),
+      mrp_per_strip: mrpPerStrip !== '' ? Number(mrpPerStrip) : null
+    })
   }
 
   return (
@@ -91,7 +106,65 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
               {errors.name && <p className="adm-field-error">{errors.name}</p>}
             </div>
 
-            {/* Price & Quantity side by side */}
+            {/* Company Name */}
+            <div className="adm-field">
+              <label htmlFor="adm-company" className="adm-label">Company Name</label>
+              <input
+                id="adm-company"
+                type="text"
+                className={`adm-input${errors.company_name ? ' adm-input--error' : ''}`}
+                value={companyName}
+                onChange={e => { setCompanyName(e.target.value); setErrors(p => ({ ...p, company_name: '' })) }}
+                placeholder="e.g. GlaxoSmithKline"
+              />
+              {errors.company_name && <p className="adm-field-error">{errors.company_name}</p>}
+            </div>
+
+            {/* Composition */}
+            <div className="adm-field">
+              <label htmlFor="adm-composition" className="adm-label">Composition / Contains</label>
+              <input
+                id="adm-composition"
+                type="text"
+                className={`adm-input${errors.composition ? ' adm-input--error' : ''}`}
+                value={composition}
+                onChange={e => { setComposition(e.target.value); setErrors(p => ({ ...p, composition: '' })) }}
+                placeholder="e.g. Paracetamol IP 500mg"
+              />
+              {errors.composition && <p className="adm-field-error">{errors.composition}</p>}
+            </div>
+
+            {/* Date & Quantity */}
+            <div className="adm-field-row">
+              <div className="adm-field">
+                <label htmlFor="adm-expiry" className="adm-label">Expiry Date</label>
+                <input
+                  id="adm-expiry"
+                  type="date"
+                  className={`adm-input${errors.expiry_date ? ' adm-input--error' : ''}`}
+                  value={expiryDate}
+                  onChange={e => { setExpiryDate(e.target.value); setErrors(p => ({ ...p, expiry_date: '' })) }}
+                />
+                {errors.expiry_date && <p className="adm-field-error">{errors.expiry_date}</p>}
+              </div>
+
+              <div className="adm-field">
+                <label htmlFor="adm-quantity" className="adm-label">Quantity</label>
+                <input
+                  id="adm-quantity"
+                  type="number"
+                  min="0"
+                  step="1"
+                  className={`adm-input${errors.quantity ? ' adm-input--error' : ''}`}
+                  value={quantity}
+                  onChange={e => { setQuantity(e.target.value); setErrors(p => ({ ...p, quantity: '' })) }}
+                  placeholder="0"
+                />
+                {errors.quantity && <p className="adm-field-error">{errors.quantity}</p>}
+              </div>
+            </div>
+
+            {/* Price & MRP per Strip */}
             <div className="adm-field-row">
               <div className="adm-field">
                 <label htmlFor="adm-price" className="adm-label">Price (₹)</label>
@@ -109,18 +182,18 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
               </div>
 
               <div className="adm-field">
-                <label htmlFor="adm-quantity" className="adm-label">Quantity</label>
+                <label htmlFor="adm-mrp-strip" className="adm-label">MRP per Strip (₹)</label>
                 <input
-                  id="adm-quantity"
+                  id="adm-mrp-strip"
                   type="number"
                   min="0"
-                  step="1"
-                  className={`adm-input${errors.quantity ? ' adm-input--error' : ''}`}
-                  value={quantity}
-                  onChange={e => { setQuantity(e.target.value); setErrors(p => ({ ...p, quantity: '' })) }}
+                  step="0.01"
+                  className={`adm-input${errors.mrp_per_strip ? ' adm-input--error' : ''}`}
+                  value={mrpPerStrip}
+                  onChange={e => { setMrpPerStrip(e.target.value); setErrors(p => ({ ...p, mrp_per_strip: '' })) }}
                   placeholder="0"
                 />
-                {errors.quantity && <p className="adm-field-error">{errors.quantity}</p>}
+                {errors.mrp_per_strip && <p className="adm-field-error">{errors.mrp_per_strip}</p>}
               </div>
             </div>
           </div>
@@ -139,3 +212,4 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
     </AnimatePresence>
   )
 }
+
