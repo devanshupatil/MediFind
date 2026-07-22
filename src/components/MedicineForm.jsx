@@ -12,7 +12,6 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
   const isEdit = Boolean(medicine)
 
   const [name,          setName]          = useState(medicine?.name          ?? '')
-  const [price,         setPrice]         = useState(medicine?.price         ?? '')
   const [quantity,      setQuantity]      = useState(medicine?.quantity      ?? '')
   const [expiryDate,    setExpiryDate]    = useState(medicine?.expiry_date   ?? '')
   const [companyName,   setCompanyName]   = useState(medicine?.company_name  ?? '')
@@ -23,7 +22,6 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
   const validate = () => {
     const e = {}
     if (!name.trim())              e.name     = 'Name is required'
-    if (price === '' || price < 0) e.price    = 'Enter a valid price'
     if (quantity === '' || quantity < 0) e.quantity = 'Enter a valid quantity'
     if (mrpPerStrip !== '' && Number(mrpPerStrip) < 0) {
       e.mrp_per_strip = 'MRP must be positive'
@@ -37,7 +35,6 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
     if (Object.keys(e2).length) { setErrors(e2); return }
     onSubmit({
       name: name.trim(),
-      price: Number(price),
       quantity: Number(quantity),
       expiry_date: expiryDate,
       company_name: companyName.trim(),
@@ -164,23 +161,8 @@ export function MedicineForm({ medicine, onSubmit, onCancel }) {
               </div>
             </div>
 
-            {/* Price & MRP per Strip */}
+            {/* MRP per Strip & Quantity */}
             <div className="adm-field-row">
-              <div className="adm-field">
-                <label htmlFor="adm-price" className="adm-label">Price (₹)</label>
-                <input
-                  id="adm-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className={`adm-input${errors.price ? ' adm-input--error' : ''}`}
-                  value={price}
-                  onChange={e => { setPrice(e.target.value); setErrors(p => ({ ...p, price: '' })) }}
-                  placeholder="0"
-                />
-                {errors.price && <p className="adm-field-error">{errors.price}</p>}
-              </div>
-
               <div className="adm-field">
                 <label htmlFor="adm-mrp-strip" className="adm-label">MRP per Strip (₹)</label>
                 <input
