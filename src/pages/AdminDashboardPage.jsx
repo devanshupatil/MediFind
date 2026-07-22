@@ -350,7 +350,11 @@ export function AdminDashboardPage() {
       ops.push(supabase.from('medicines').insert(inserts))
 
     for (const u of updates)
-      ops.push(supabase.from('medicines').update({ name: u.name, price: u.price, quantity: u.quantity }).eq('id', u.id))
+      ops.push(supabase.from('medicines').update({
+        name: u.name, quantity: u.quantity,
+        expiry_date: u.expiry_date, company_name: u.company_name,
+        composition: u.composition, mrp_per_strip: u.mrp_per_strip,
+      }).eq('id', u.id))
 
     for (const id of deletes)
       ops.push(supabase.from('medicines').delete().eq('id', id))
@@ -506,48 +510,77 @@ export function AdminDashboardPage() {
                   <thead>
                     <tr>
                       <th className="adm-th">Medicine</th>
-                      <th className="adm-th adm-th--right">Price (₹)</th>
+                      <th className="adm-th">Company</th>
+                      <th className="adm-th">Composition</th>
+                      <th className="adm-th adm-th--right">MRP/Strip (₹)</th>
                       <th className="adm-th adm-th--right">Qty</th>
+                      <th className="adm-th">Expiry</th>
                       <th className="adm-th">Status</th>
                       <th className="adm-th adm-th--right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((med, i) => (
-                      <motion.tr
-                        key={med.id}
-                        className="adm-tr"
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.3 }}
-                      >
-                        <td className="adm-td adm-td--name">{med.name}</td>
-                        <td className="adm-td adm-td--right adm-td--price">₹{med.price ?? '—'}</td>
-                        <td className="adm-td adm-td--right">{med.quantity ?? 0}</td>
-                        <td className="adm-td"><StockBadge quantity={med.quantity} /></td>
-                        <td className="adm-td adm-td--right">
-                          <div className="adm-actions">
-                            <button
-                              type="button"
-                              className="adm-action-btn adm-action-btn--edit"
-                              onClick={() => setEditTarget(med)}
-                              aria-label={`Edit ${med.name}`}
-                            >
-                              <IconEdit />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="adm-action-btn adm-action-btn--delete"
-                              onClick={() => setDeleteTarget(med)}
-                              aria-label={`Delete ${med.name}`}
-                            >
-                              <IconTrash />
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </motion.tr>
+                        <motion.tr
+                          key={med.id}
+                          className="adm-tr"
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.3 }}
+                        >
+                          <td className="adm-td adm-td--name">
+                            <div>{med.name}</div>
+                            {med.composition && (
+                              <div className="adm-td-sub">Contains: {med.composition}</div>
+                            )}
+                          </td>
+                          <td className="adm-td">{med.company_name ?? '—'}</td>
+                          <td className="adm-td adm-td--composition">{med.composition ?? '—'}</td>
+                          <td className="adm-td adm-td--right adm-td--price">
+                            {med.mrp_per_strip != null ? `₹${med.mrp_per_strip}` : '—'}
+                          </td>
+                          <td className="adm-td adm-td--right">{med.quantity ?? 0}</td>
+                          <td className="adm-td">
+                            {med.expiry_date
+                              ? (() => {
+                                  const d = new Date(med.expiry_date)
+                                  const now = new Date()
+                                  const soon = new Date(); soon.setMonth(soon.getMonth() + 3)
+                                  const past = d < now
+                                  const close = d < soon
+                                  return (
+                                    <span className={`adm-expiry${past ? ' adm-expiry--expired' : close ? ' adm-expiry--soon' : ''}`}>
+                                      {past && '⚠️ '}{d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                                    </span>
+                                  )
+                                })()
+                              : '—'
+                            }
+                          </td>
+                          <td className="adm-td"><StockBadge quantity={med.quantity} /></td>
+                          <td className="adm-td adm-td--right">
+                            <div className="adm-actions">
+                              <button
+                                type="button"
+                                className="adm-action-btn adm-action-btn--edit"
+                                onClick={() => setEditTarget(med)}
+                                aria-label={`Edit ${med.name}`}
+                              >
+                                <IconEdit />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="adm-action-btn adm-action-btn--delete"
+                                onClick={() => setDeleteTarget(med)}
+                                aria-label={`Delete ${med.name}`}
+                              >
+                                <IconTrash />
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </motion.tr>
                     ))}
                   </tbody>
                 </table>
