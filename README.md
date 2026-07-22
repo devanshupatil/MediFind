@@ -120,11 +120,15 @@ MediFind uses **Supabase (PostgreSQL)** to store medicine data.
 ```sql
 -- medicines table
 CREATE TABLE medicines (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name       text NOT NULL,        -- Medicine / Brand name
-  price      numeric NOT NULL,     -- Price in ₹ (INR)
-  quantity   integer NOT NULL,     -- Stock quantity (0 = out of stock)
-  created_at timestamptz DEFAULT now()
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           text NOT NULL,        -- Medicine / Brand name
+  price          numeric NOT NULL,     -- Price in ₹ (INR)
+  quantity       integer NOT NULL,     -- Stock quantity (0 = out of stock)
+  company_name   text,                 -- Manufacturer / Company
+  composition    text,                 -- Contains / Composition
+  mrp_per_strip  numeric,              -- MRP per strip in ₹ (INR)
+  expiry_date    date,                 -- Expiry date
+  created_at     timestamptz DEFAULT now()
 );
 ```
 
