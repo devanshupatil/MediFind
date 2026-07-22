@@ -655,7 +655,98 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
+
+/* Card meta: company + composition */
+.sp-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+
+.sp-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.sp-meta-company {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.sp-meta-composition {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+/* Price group: MRP + Price */
+.sp-price-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-mrp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sp-mrp-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.sp-mrp-val {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+/* Card actions row */
+.sp-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Expiry tag */
+.sp-expiry {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.sp-expiry--soon {
+  background: rgba(217, 119, 6, 0.1);
+  color: #b45309;
+  border-color: rgba(217, 119, 6, 0.25);
+}
+
+.sp-expiry--expired {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
 
 /* Price */
 .sp-price {
@@ -1707,6 +1798,46 @@
 
 .adm-td--right { text-align: right; }
 
+.adm-td-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.adm-td--composition {
+  max-width: 180px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Admin expiry chip */
+.adm-expiry {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+}
+
+.adm-expiry--soon {
+  background: rgba(217, 119, 6, 0.1);
+  color: #b45309;
+}
+
+.adm-expiry--expired {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+
 /* Table skeleton */
 .adm-table-loading { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
 
@@ -2229,12 +2360,16 @@
   text-align: left;
   white-space: nowrap;
 }
-.bke-th--num    { width: 52px; text-align: center; }
-.bke-th--name   { min-width: 200px; }
-.bke-th--price  { width: 130px; }
-.bke-th--qty    { width: 110px; }
-.bke-th--status { width: 80px; }
-.bke-th--del    { width: 80px; text-align: right; }
+.bke-th--num         { width: 52px; text-align: center; }
+.bke-th--name        { min-width: 160px; }
+.bke-th--company     { min-width: 140px; }
+.bke-th--composition { min-width: 160px; }
+.bke-th--price       { width: 110px; }
+.bke-th--mrp         { width: 120px; }
+.bke-th--qty         { width: 90px; }
+.bke-th--expiry      { width: 140px; }
+.bke-th--status      { width: 80px; }
+.bke-th--del         { width: 80px; text-align: right; }
 
 /* ── Table rows ── */
 .bke-tr {
