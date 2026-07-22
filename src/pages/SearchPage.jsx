@@ -123,10 +123,23 @@ function MedicineCard({ med, index }) {
   const translatedName = useTranslatedName(med.name)
   const isTranslating = translatedName === med.name && lang !== 'en'
 
+  const expiryLabel = (() => {
+    if (!med.expiry_date) return null
+    const d = new Date(med.expiry_date)
+    const now = new Date()
+    const soon = new Date(); soon.setMonth(soon.getMonth() + 3)
+    const past = d < now
+    const close = d < soon
+    const label = d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+    return { label, past, close }
+  })()
+
   return (
     <motion.article
       className="sp-card"
+      role="listitem"
       initial={{ opacity: 0, y: 24 }}
+
       animate={{ opacity: 1, y: 0 }}
       transition={{
         delay: Math.min(index * 0.06, 0.42),
@@ -148,20 +161,47 @@ function MedicineCard({ med, index }) {
         <p className="sp-card-name-original">{med.name}</p>
       )}
 
-      <div className="sp-card-bottom">
-        <div className="sp-price">
-          <span className="sp-price-sym">₹</span>
-          <span className="sp-price-val">{med.price ?? '—'}</span>
-        </div>
-        {PHONE && (
-          <a
-            href={`tel:${PHONE}`}
-            className="sp-call-link"
-            aria-label={t('ariaCallStoreAbout', { name: med.name })}
-          >
-            <IconPhone />
-          </a>
+      {/* Company + Composition */}
+      <div className="sp-card-meta">
+        {med.company_name && (
+          <span className="sp-meta-item sp-meta-company">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+            {med.company_name}
+          </span>
         )}
+        {med.composition && (
+          <span className="sp-meta-item sp-meta-composition">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+            {med.composition}
+          </span>
+        )}
+      </div>
+
+      <div className="sp-card-bottom">
+        <div className="sp-price-group">
+          {med.mrp_per_strip != null && (
+            <div className="sp-mrp">
+              <span className="sp-mrp-label">MRP/Strip</span>
+              <span className="sp-mrp-val">₹{med.mrp_per_strip}</span>
+            </div>
+          )}
+        </div>
+        <div className="sp-card-actions">
+          {expiryLabel && (
+            <span className={`sp-expiry${expiryLabel.past ? ' sp-expiry--expired' : expiryLabel.close ? ' sp-expiry--soon' : ''}`}>
+              {expiryLabel.past ? '⚠️ Expired' : `Exp: ${expiryLabel.label}`}
+            </span>
+          )}
+          {PHONE && (
+            <a
+              href={`tel:${PHONE}`}
+              className="sp-call-link"
+              aria-label={t('ariaCallStoreAbout', { name: med.name })}
+            >
+              <IconPhone />
+            </a>
+          )}
+        </div>
       </div>
     </motion.article>
   )
@@ -238,6 +278,10 @@ export function SearchPage() {
     if (!q) return true
     // Always match on original English name
     if (m.name.toLowerCase().includes(q)) return true
+    // Match on company name
+    if (m.company_name?.toLowerCase().includes(q)) return true
+    // Match on composition
+    if (m.composition?.toLowerCase().includes(q)) return true
     // Also match on translated name if already cached
     if (lang !== 'en') {
       const cached = translationCache.get(`${lang}:${m.name}`)
