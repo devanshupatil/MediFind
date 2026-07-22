@@ -678,12 +678,12 @@
 
 .sp-meta-company {
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: #000;
 }
 
 .sp-meta-composition {
   font-style: italic;
-  opacity: 0.85;
+  color: #000;
 }
 
 /* Price group: MRP + Price */
@@ -708,9 +708,9 @@
 }
 
 .sp-mrp-val {
-  font-size: var(--text-sm);
+  font-size: var(--text-xl);
   font-weight: 700;
-  color: var(--color-text-secondary);
+  color: #000;
 }
 
 /* Card actions row */
@@ -1792,8 +1792,9 @@
 }
 
 .adm-td--price {
+  font-size: var(--text-lg);
   font-weight: 700;
-  color: var(--color-primary);
+  color: #000;
 }
 
 .adm-td--right { text-align: right; }
@@ -1809,7 +1810,7 @@
 .adm-td--composition {
   max-width: 180px;
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  color: #000;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
