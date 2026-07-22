@@ -11,16 +11,20 @@ const medicines = [
 describe('StatsRow', () => {
   it('shows total count', () => {
     render(<StatsRow medicines={medicines} />)
-    expect(screen.getByText('3')).toBeInTheDocument()
+    const card = screen.getByText('Total Medicines').closest('.adm-stat-card')
+    expect(card.querySelector('.adm-stat-value')).toHaveTextContent('3')
   })
 
   it('shows in stock count', () => {
     render(<StatsRow medicines={medicines} />)
-    expect(screen.getByText('2')).toBeInTheDocument()
+    const card = screen.getByText('In Stock').closest('.adm-stat-card')
+    expect(card.querySelector('.adm-stat-value')).toHaveTextContent('2')
   })
 
   it('shows out of stock count', () => {
     render(<StatsRow medicines={medicines} />)
-    expect(screen.getByText('1')).toBeInTheDocument()
+    const card = screen.getByText('Out of Stock').closest('.adm-stat-card')
+    expect(card.querySelector('.adm-stat-value')).toHaveTextContent('1')
   })
 })
+
